@@ -310,8 +310,10 @@ class RhemaAPITester:
         self.test_dashboard_stats()
         self.test_members_endpoint()
         self.test_schedules_endpoint()
+        self.test_attendance_endpoint()
         self.test_approvals_endpoint()
         self.test_links_endpoint()
+        self.test_gamification_endpoints()
         self.test_ai_suggestions()
 
         # Print summary
