@@ -15,7 +15,8 @@ import {
   LogOut,
   Menu,
   X,
-  ChevronRight
+  ChevronRight,
+  Trophy
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ const navItems = [
   { icon: Users, label: "Membros", path: "/members" },
   { icon: CheckSquare, label: "Aprovações", path: "/approvals" },
   { icon: Link2, label: "Links", path: "/links" },
+  { icon: Trophy, label: "Ranking", path: "/gamification" },
   { icon: Settings, label: "Configurações", path: "/settings" },
 ];
 

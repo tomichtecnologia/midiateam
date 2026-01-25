@@ -13,6 +13,7 @@ import MembersPage from "@/pages/MembersPage";
 import ApprovalsPage from "@/pages/ApprovalsPage";
 import LinksPage from "@/pages/LinksPage";
 import SettingsPage from "@/pages/SettingsPage";
+import GamificationPage from "@/pages/GamificationPage";
 import SidebarLayout from "@/components/SidebarLayout";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -174,6 +175,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <SettingsPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/gamification"
+        element={
+          <ProtectedRoute>
+            <GamificationPage />
           </ProtectedRoute>
         }
       />
