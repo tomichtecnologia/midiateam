@@ -227,6 +227,52 @@ class RhemaAPITester:
             self.log_result("AI Suggestions (Unauthenticated)", False, f"Expected 401, got {status}")
             return False
 
+    def test_gamification_endpoints(self):
+        """Test gamification endpoints"""
+        # Test leaderboard endpoint (should require auth)
+        success, status, data = self.make_request('GET', 'gamification/leaderboard', expected_status=401)
+        
+        if status == 401:
+            self.log_result("Gamification Leaderboard (Unauthenticated)", True)
+        else:
+            self.log_result("Gamification Leaderboard (Unauthenticated)", False, f"Expected 401, got {status}")
+
+        # Test badges endpoint (should require auth)
+        success, status, data = self.make_request('GET', 'gamification/badges', expected_status=401)
+        
+        if status == 401:
+            self.log_result("Gamification Badges (Unauthenticated)", True)
+        else:
+            self.log_result("Gamification Badges (Unauthenticated)", False, f"Expected 401, got {status}")
+
+        # Test my-stats endpoint (should require auth)
+        success, status, data = self.make_request('GET', 'gamification/my-stats', expected_status=401)
+        
+        if status == 401:
+            self.log_result("Gamification My Stats (Unauthenticated)", True)
+            return True
+        else:
+            self.log_result("Gamification My Stats (Unauthenticated)", False, f"Expected 401, got {status}")
+            return False
+
+    def test_attendance_endpoint(self):
+        """Test attendance confirmation endpoint"""
+        # Test attendance confirmation (should require auth)
+        attendance_data = {
+            "schedule_id": "test_schedule_123",
+            "member_id": "test_member_123", 
+            "status": "confirmed"
+        }
+        
+        success, status, data = self.make_request('POST', 'schedules/test_schedule_123/attendance', attendance_data, expected_status=401)
+        
+        if status == 401:
+            self.log_result("Attendance Confirmation (Unauthenticated)", True)
+            return True
+        else:
+            self.log_result("Attendance Confirmation (Unauthenticated)", False, f"Expected 401, got {status}")
+            return False
+
     def test_auth_endpoints(self):
         """Test authentication endpoints"""
         # Test /auth/me without session
