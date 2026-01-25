@@ -42,25 +42,24 @@ class User(BaseModel):
     name: str
     picture: Optional[str] = None
     phone: Optional[str] = None
-    role: str = "member"  # member, leader, admin
+    role: str = "member"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    picture: Optional[str] = None
 
 class Member(BaseModel):
     model_config = ConfigDict(extra="ignore")
     member_id: str = Field(default_factory=lambda: f"member_{uuid.uuid4().hex[:12]}")
-    user_id: str
+    user_id: Optional[str] = None
     name: str
     email: str
     phone: Optional[str] = None
     picture: Optional[str] = None
-    role: str = "operator"  # operator, editor, camera, sound, social_media
-    department: str = "production"  # production, content, development
+    role: str = "operator"
+    department: str = "production"
     active: bool = True
+    # Gamification fields
+    points: int = 0
+    badges: List[str] = []
+    level: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class MemberCreate(BaseModel):
@@ -76,15 +75,15 @@ class Schedule(BaseModel):
     schedule_id: str = Field(default_factory=lambda: f"schedule_{uuid.uuid4().hex[:12]}")
     title: str
     description: Optional[str] = None
-    schedule_type: str  # class (aulas seg/qua/sex) or content (diário)
-    date: str  # ISO date string
+    schedule_type: str
+    date: str
     start_time: str
     end_time: str
-    assigned_members: List[str] = []  # List of member_ids
-    confirmed_members: List[str] = []  # List of member_ids who confirmed
-    declined_members: List[str] = []  # List of member_ids who declined
-    substitutes: dict = {}  # {original_member_id: substitute_member_id}
-    confirmation_deadline: str  # ISO datetime string - 1 day before
+    assigned_members: List[str] = []
+    confirmed_members: List[str] = []
+    declined_members: List[str] = []
+    substitutes: dict = {}
+    confirmation_deadline: str
     created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -100,7 +99,7 @@ class ScheduleCreate(BaseModel):
 class AttendanceConfirmation(BaseModel):
     schedule_id: str
     member_id: str
-    status: str  # confirmed, declined
+    status: str
     substitute_id: Optional[str] = None
 
 class ContentApproval(BaseModel):
@@ -108,13 +107,13 @@ class ContentApproval(BaseModel):
     approval_id: str = Field(default_factory=lambda: f"approval_{uuid.uuid4().hex[:12]}")
     title: str
     description: str
-    content_type: str  # video, image, post, story
+    content_type: str
     content_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     submitted_by: str
-    votes_for: List[str] = []  # List of user_ids
-    votes_against: List[str] = []  # List of user_ids
-    status: str = "pending"  # pending, approved, rejected
+    votes_for: List[str] = []
+    votes_against: List[str] = []
+    status: str = "pending"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class ContentApprovalCreate(BaseModel):
@@ -126,14 +125,14 @@ class ContentApprovalCreate(BaseModel):
 
 class Vote(BaseModel):
     approval_id: str
-    vote: str  # for, against
+    vote: str
 
 class Link(BaseModel):
     model_config = ConfigDict(extra="ignore")
     link_id: str = Field(default_factory=lambda: f"link_{uuid.uuid4().hex[:12]}")
     title: str
     url: str
-    category: str  # tools, social, resources, passwords
+    category: str
     username: Optional[str] = None
     password: Optional[str] = None
     notes: Optional[str] = None
@@ -148,12 +147,100 @@ class LinkCreate(BaseModel):
     password: Optional[str] = None
     notes: Optional[str] = None
 
-class DashboardStats(BaseModel):
-    total_members: int
-    active_schedules: int
-    pending_approvals: int
-    confirmed_attendance: int
-    growth_percentage: float
+# ============== GAMIFICATION BADGES ==============
+
+BADGES = {
+    "first_login": {"name": "Primeiro Acesso", "description": "Fez login pela primeira vez", "icon": "🎉", "points": 10},
+    "schedule_confirmed": {"name": "Compromissado", "description": "Confirmou presença em uma escala", "icon": "✅", "points": 20},
+    "schedule_5": {"name": "Dedicado", "description": "Confirmou 5 escalas", "icon": "⭐", "points": 50},
+    "schedule_10": {"name": "Fiel", "description": "Confirmou 10 escalas", "icon": "🌟", "points": 100},
+    "schedule_25": {"name": "Pilar da Equipe", "description": "Confirmou 25 escalas", "icon": "🏆", "points": 250},
+    "first_vote": {"name": "Voz Ativa", "description": "Votou pela primeira vez", "icon": "🗳️", "points": 15},
+    "voter_10": {"name": "Participativo", "description": "Votou em 10 aprovações", "icon": "📊", "points": 75},
+    "content_creator": {"name": "Criador", "description": "Enviou conteúdo para aprovação", "icon": "🎨", "points": 30},
+    "content_approved": {"name": "Aprovado!", "description": "Teve conteúdo aprovado", "icon": "🎬", "points": 100},
+    "content_5_approved": {"name": "Produtor", "description": "Teve 5 conteúdos aprovados", "icon": "🎥", "points": 250},
+    "helper": {"name": "Ajudante", "description": "Substituiu alguém na escala", "icon": "🤝", "points": 40},
+    "link_contributor": {"name": "Contribuidor", "description": "Adicionou um link útil", "icon": "🔗", "points": 15},
+    "ai_explorer": {"name": "Explorador IA", "description": "Usou o assistente de IA", "icon": "🤖", "points": 20},
+    "level_5": {"name": "Nível 5", "description": "Alcançou o nível 5", "icon": "🔥", "points": 0},
+    "level_10": {"name": "Veterano", "description": "Alcançou o nível 10", "icon": "💎", "points": 0},
+}
+
+def calculate_level(points: int) -> int:
+    """Calculate level based on points"""
+    if points < 50:
+        return 1
+    elif points < 150:
+        return 2
+    elif points < 300:
+        return 3
+    elif points < 500:
+        return 4
+    elif points < 750:
+        return 5
+    elif points < 1000:
+        return 6
+    elif points < 1500:
+        return 7
+    elif points < 2000:
+        return 8
+    elif points < 3000:
+        return 9
+    else:
+        return 10
+
+async def award_badge(user_id: str, badge_id: str):
+    """Award a badge to a user and add points"""
+    if badge_id not in BADGES:
+        return
+    
+    badge = BADGES[badge_id]
+    member = await db.members.find_one({"user_id": user_id}, {"_id": 0})
+    if not member:
+        return
+    
+    if badge_id in member.get("badges", []):
+        return  # Already has badge
+    
+    new_points = member.get("points", 0) + badge["points"]
+    new_level = calculate_level(new_points)
+    
+    await db.members.update_one(
+        {"user_id": user_id},
+        {
+            "$addToSet": {"badges": badge_id},
+            "$set": {"points": new_points, "level": new_level}
+        }
+    )
+    
+    # Check for level badges
+    if new_level >= 5 and "level_5" not in member.get("badges", []):
+        await db.members.update_one(
+            {"user_id": user_id},
+            {"$addToSet": {"badges": "level_5"}}
+        )
+    if new_level >= 10 and "level_10" not in member.get("badges", []):
+        await db.members.update_one(
+            {"user_id": user_id},
+            {"$addToSet": {"badges": "level_10"}}
+        )
+    
+    return {"badge": badge, "new_points": new_points, "new_level": new_level}
+
+async def add_points(user_id: str, points: int):
+    """Add points to a user"""
+    member = await db.members.find_one({"user_id": user_id}, {"_id": 0})
+    if not member:
+        return
+    
+    new_points = member.get("points", 0) + points
+    new_level = calculate_level(new_points)
+    
+    await db.members.update_one(
+        {"user_id": user_id},
+        {"$set": {"points": new_points, "level": new_level}}
+    )
 
 # ============== AUTH HELPERS ==============
 
@@ -176,7 +263,6 @@ async def get_current_user(request: Request) -> User:
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
     
-    # Check expiry
     expires_at = session.get("expires_at")
     if isinstance(expires_at, str):
         expires_at = datetime.fromisoformat(expires_at)
@@ -206,9 +292,8 @@ async def create_session(request: Request, response: Response):
     if not session_id:
         raise HTTPException(status_code=400, detail="session_id required")
     
-    # Exchange session_id with Emergent Auth
-    async with httpx.AsyncClient() as client:
-        auth_response = await client.get(
+    async with httpx.AsyncClient() as http_client:
+        auth_response = await http_client.get(
             "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
             headers={"X-Session-ID": session_id}
         )
@@ -219,13 +304,12 @@ async def create_session(request: Request, response: Response):
         auth_data = auth_response.json()
     
     user_id = f"user_{uuid.uuid4().hex[:12]}"
+    is_new_user = False
     
-    # Check if user exists
     existing_user = await db.users.find_one({"email": auth_data["email"]}, {"_id": 0})
     
     if existing_user:
         user_id = existing_user["user_id"]
-        # Update user info
         await db.users.update_one(
             {"user_id": user_id},
             {"$set": {
@@ -234,7 +318,7 @@ async def create_session(request: Request, response: Response):
             }}
         )
     else:
-        # Create new user
+        is_new_user = True
         new_user = {
             "user_id": user_id,
             "email": auth_data["email"],
@@ -245,7 +329,6 @@ async def create_session(request: Request, response: Response):
         }
         await db.users.insert_one(new_user)
         
-        # Also create a member entry
         member = {
             "member_id": f"member_{uuid.uuid4().hex[:12]}",
             "user_id": user_id,
@@ -255,11 +338,13 @@ async def create_session(request: Request, response: Response):
             "role": "operator",
             "department": "production",
             "active": True,
+            "points": 10,  # First login points
+            "badges": ["first_login"],
+            "level": 1,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.members.insert_one(member)
     
-    # Create session
     session_token = auth_data.get("session_token", f"session_{uuid.uuid4().hex}")
     expires_at = datetime.now(timezone.utc) + timedelta(days=7)
     
@@ -270,7 +355,6 @@ async def create_session(request: Request, response: Response):
         "created_at": datetime.now(timezone.utc).isoformat()
     })
     
-    # Set cookie
     response.set_cookie(
         key="session_token",
         value=session_token,
@@ -319,13 +403,16 @@ async def get_member(member_id: str, user: User = Depends(get_current_user)):
 async def create_member(member_data: MemberCreate, user: User = Depends(get_current_user)):
     """Create a new member"""
     member = Member(
-        user_id=user.user_id,
+        user_id=None,  # Will be linked when they login
         **member_data.model_dump()
     )
     doc = member.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.members.insert_one(doc)
-    return doc
+    
+    # Return without _id
+    result = await db.members.find_one({"member_id": doc["member_id"]}, {"_id": 0})
+    return result
 
 @api_router.put("/members/{member_id}")
 async def update_member(member_id: str, member_data: MemberCreate, user: User = Depends(get_current_user)):
@@ -348,6 +435,43 @@ async def delete_member(member_id: str, user: User = Depends(get_current_user)):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"message": "Member deleted"}
+
+# ============== GAMIFICATION ROUTES ==============
+
+@api_router.get("/gamification/leaderboard")
+async def get_leaderboard(user: User = Depends(get_current_user)):
+    """Get gamification leaderboard"""
+    members = await db.members.find(
+        {"active": True},
+        {"_id": 0, "member_id": 1, "name": 1, "picture": 1, "points": 1, "level": 1, "badges": 1}
+    ).sort("points", -1).limit(20).to_list(20)
+    return members
+
+@api_router.get("/gamification/badges")
+async def get_all_badges(user: User = Depends(get_current_user)):
+    """Get all available badges"""
+    return BADGES
+
+@api_router.get("/gamification/my-stats")
+async def get_my_stats(user: User = Depends(get_current_user)):
+    """Get current user's gamification stats"""
+    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not member:
+        return {"points": 0, "level": 1, "badges": [], "rank": 0}
+    
+    # Get rank
+    higher_count = await db.members.count_documents({
+        "active": True,
+        "points": {"$gt": member.get("points", 0)}
+    })
+    
+    return {
+        "points": member.get("points", 0),
+        "level": member.get("level", 1),
+        "badges": member.get("badges", []),
+        "rank": higher_count + 1,
+        "badges_info": {b: BADGES[b] for b in member.get("badges", []) if b in BADGES}
+    }
 
 # ============== SCHEDULES ROUTES ==============
 
@@ -384,7 +508,6 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
 @api_router.post("/schedules")
 async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(get_current_user)):
     """Create a new schedule"""
-    # Calculate confirmation deadline (1 day before)
     schedule_date = datetime.fromisoformat(schedule_data.date)
     deadline = schedule_date - timedelta(days=1)
     
@@ -396,7 +519,9 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
     doc = schedule.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.schedules.insert_one(doc)
-    return doc
+    
+    result = await db.schedules.find_one({"schedule_id": doc["schedule_id"]}, {"_id": 0})
+    return result
 
 @api_router.put("/schedules/{schedule_id}")
 async def update_schedule(schedule_id: str, schedule_data: ScheduleCreate, user: User = Depends(get_current_user)):
@@ -429,7 +554,6 @@ async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmat
     member_id = confirmation.member_id
     
     if confirmation.status == "confirmed":
-        # Add to confirmed, remove from declined
         await db.schedules.update_one(
             {"schedule_id": schedule_id},
             {
@@ -437,14 +561,33 @@ async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmat
                 "$pull": {"declined_members": member_id}
             }
         )
+        
+        # Award badge and points
+        await award_badge(user.user_id, "schedule_confirmed")
+        await add_points(user.user_id, 10)
+        
+        # Check for milestone badges
+        member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+        confirm_count = await db.schedules.count_documents({"confirmed_members": member.get("member_id")})
+        
+        if confirm_count >= 5:
+            await award_badge(user.user_id, "schedule_5")
+        if confirm_count >= 10:
+            await award_badge(user.user_id, "schedule_10")
+        if confirm_count >= 25:
+            await award_badge(user.user_id, "schedule_25")
+            
     elif confirmation.status == "declined":
-        # Add to declined, remove from confirmed, add substitute if provided
         update = {
             "$addToSet": {"declined_members": member_id},
             "$pull": {"confirmed_members": member_id}
         }
         if confirmation.substitute_id:
             update["$set"] = {f"substitutes.{member_id}": confirmation.substitute_id}
+            # Award helper badge to substitute
+            sub_member = await db.members.find_one({"member_id": confirmation.substitute_id}, {"_id": 0})
+            if sub_member and sub_member.get("user_id"):
+                await award_badge(sub_member["user_id"], "helper")
         
         await db.schedules.update_one({"schedule_id": schedule_id}, update)
     
@@ -453,7 +596,6 @@ async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmat
 @api_router.get("/my-schedules")
 async def get_my_schedules(user: User = Depends(get_current_user)):
     """Get schedules for current user"""
-    # Find member by user_id
     member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
     if not member:
         return []
@@ -487,7 +629,13 @@ async def create_approval(approval_data: ContentApprovalCreate, user: User = Dep
     doc = approval.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.content_approvals.insert_one(doc)
-    return doc
+    
+    # Award badge
+    await award_badge(user.user_id, "content_creator")
+    await add_points(user.user_id, 15)
+    
+    result = await db.content_approvals.find_one({"approval_id": doc["approval_id"]}, {"_id": 0})
+    return result
 
 @api_router.post("/approvals/{approval_id}/vote")
 async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(get_current_user)):
@@ -499,7 +647,10 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
     if approval["status"] != "pending":
         raise HTTPException(status_code=400, detail="Voting is closed")
     
-    # Remove previous vote
+    # Check if first vote
+    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    is_first_vote = "first_vote" not in member.get("badges", [])
+    
     await db.content_approvals.update_one(
         {"approval_id": approval_id},
         {
@@ -510,7 +661,6 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
         }
     )
     
-    # Add new vote
     if vote.vote == "for":
         await db.content_approvals.update_one(
             {"approval_id": approval_id},
@@ -522,19 +672,47 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
             {"$addToSet": {"votes_against": user.user_id}}
         )
     
-    # Check if approval threshold reached (50%+)
+    # Award badge and points
+    if is_first_vote:
+        await award_badge(user.user_id, "first_vote")
+    await add_points(user.user_id, 5)
+    
+    # Check voter milestone
+    total_votes = await db.content_approvals.count_documents({
+        "$or": [
+            {"votes_for": user.user_id},
+            {"votes_against": user.user_id}
+        ]
+    })
+    if total_votes >= 10:
+        await award_badge(user.user_id, "voter_10")
+    
+    # Check if approval threshold reached
     updated = await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
     total_members = await db.members.count_documents({"active": True})
-    total_votes = len(updated["votes_for"]) + len(updated["votes_against"])
+    total_votes_count = len(updated["votes_for"]) + len(updated["votes_against"])
     
-    if total_votes > 0 and total_members > 0:
-        approval_percentage = len(updated["votes_for"]) / total_votes * 100
-        if approval_percentage > 50 and total_votes >= max(1, total_members // 2):
+    if total_votes_count > 0 and total_members > 0:
+        approval_percentage = len(updated["votes_for"]) / total_votes_count * 100
+        if approval_percentage > 50 and total_votes_count >= max(1, total_members // 2):
             await db.content_approvals.update_one(
                 {"approval_id": approval_id},
                 {"$set": {"status": "approved"}}
             )
-        elif approval_percentage < 50 and total_votes >= max(1, total_members // 2):
+            # Award content creator
+            creator_user_id = updated["submitted_by"]
+            await award_badge(creator_user_id, "content_approved")
+            await add_points(creator_user_id, 50)
+            
+            # Check milestone
+            approved_count = await db.content_approvals.count_documents({
+                "submitted_by": creator_user_id,
+                "status": "approved"
+            })
+            if approved_count >= 5:
+                await award_badge(creator_user_id, "content_5_approved")
+                
+        elif approval_percentage < 50 and total_votes_count >= max(1, total_members // 2):
             await db.content_approvals.update_one(
                 {"approval_id": approval_id},
                 {"$set": {"status": "rejected"}}
@@ -560,7 +738,13 @@ async def create_link(link_data: LinkCreate, user: User = Depends(get_current_us
     doc = link.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.links.insert_one(doc)
-    return doc
+    
+    # Award badge
+    await award_badge(user.user_id, "link_contributor")
+    await add_points(user.user_id, 10)
+    
+    result = await db.links.find_one({"link_id": doc["link_id"]}, {"_id": 0})
+    return result
 
 @api_router.put("/links/{link_id}")
 async def update_link(link_id: str, link_data: LinkCreate, user: User = Depends(get_current_user)):
@@ -588,7 +772,6 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
     """Get dashboard statistics"""
     total_members = await db.members.count_documents({"active": True})
     
-    # Get schedules for next 7 days
     today = datetime.now(timezone.utc).date().isoformat()
     week_later = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
     active_schedules = await db.schedules.count_documents({
@@ -597,14 +780,12 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
     
     pending_approvals = await db.content_approvals.count_documents({"status": "pending"})
     
-    # Count confirmed attendance for upcoming schedules
     upcoming_schedules = await db.schedules.find(
         {"date": {"$gte": today}},
         {"confirmed_members": 1, "_id": 0}
     ).to_list(100)
     confirmed_attendance = sum(len(s.get("confirmed_members", [])) for s in upcoming_schedules)
     
-    # Calculate growth (comparing this month to last month members)
     this_month_start = datetime.now(timezone.utc).replace(day=1).isoformat()
     last_month = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
     last_month_start = last_month.replace(day=1).isoformat()
@@ -671,6 +852,10 @@ async def get_ai_suggestion(request: Request, user: User = Depends(get_current_u
         
         user_message = UserMessage(text=prompt)
         response = await chat.send_message(user_message)
+        
+        # Award badge for using AI
+        await award_badge(user.user_id, "ai_explorer")
+        await add_points(user.user_id, 5)
         
         return {"suggestion": response}
     except ImportError:
