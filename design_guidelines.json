@@ -1,0 +1,98 @@
+{
+  "design_system": {
+    "typography": {
+      "font_family": {
+        "headings": "Outfit, sans-serif",
+        "body": "Plus Jakarta Sans, sans-serif",
+        "mono": "JetBrains Mono, monospace"
+      },
+      "scale": {
+        "h1": "text-4xl md:text-5xl font-bold tracking-tight",
+        "h2": "text-3xl md:text-4xl font-semibold tracking-tight",
+        "h3": "text-2xl font-semibold",
+        "h4": "text-xl font-medium",
+        "body": "text-base leading-relaxed",
+        "small": "text-sm text-muted-foreground"
+      }
+    },
+    "colors": {
+      "palette": {
+        "primary": {
+          "DEFAULT": "#D90429",
+          "foreground": "#FFFFFF",
+          "hover": "#EF233C"
+        },
+        "secondary": {
+          "DEFAULT": "#2B2D42",
+          "foreground": "#FFFFFF"
+        },
+        "background": "#F8F9FA",
+        "surface": "#FFFFFF",
+        "muted": "#EDF2F4",
+        "accent": "#8D99AE",
+        "success": "#10B981",
+        "warning": "#F59E0B",
+        "error": "#EF4444"
+      },
+      "theme_strategy": "Light mode dominant with high-contrast dark sidebar/header for professional media tool feel."
+    },
+    "visual_enhancers": {
+      "radius": "rounded-lg",
+      "shadows": {
+        "card": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+        "hover": "shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
+        "dropdown": "shadow-xl border border-border/50"
+      },
+      "glassmorphism": "bg-white/80 backdrop-blur-md border border-white/20",
+      "gradients": "None for backgrounds. Use subtle mesh gradients only for 'Creative' areas or empty states."
+    },
+    "layout": {
+      "grid_system": "Bento Grid (CSS Grid) for Dashboard. 12-column system.",
+      "spacing": "Generous. p-6 to p-8 for main containers. gap-6 for grids.",
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+    },
+    "motion": {
+      "transitions": "transition-all duration-200 ease-in-out",
+      "hover_effects": "transform hover:-translate-y-1",
+      "loading": "Skeleton loaders with shimmering effect"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/90",
+      "ghost": "hover:bg-accent hover:text-accent-foreground",
+      "outline": "border-2 border-input hover:bg-accent hover:text-accent-foreground"
+    },
+    "cards": {
+      "base": "bg-card text-card-foreground rounded-xl border shadow-sm hover:shadow-md transition-shadow",
+      "schedule": "border-l-4 border-l-primary"
+    },
+    "inputs": {
+      "base": "h-11 rounded-md border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+    }
+  },
+  "image_urls": {
+    "login_hero": "https://images.unsplash.com/photo-1540058404349-2e5fabf32d75?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwyfHx5b3VuZyUyMGNyZWF0aXZlJTIwbWVkaWElMjB0ZWFtJTIwd29ya2luZ3xlbnwwfHx8fDE3NjkzNzEzNTF8MA&ixlib=rb-4.1.0&q=85",
+    "dashboard_banner": "https://images.unsplash.com/photo-1673557478884-5017643d6b5a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjB2aWRlbyUyMGNhbWVyYSUyMHN0dWRpb3xlbnwwfHx8fDE3NjkzNzEzNTV8MA&ixlib=rb-4.1.0&q=85",
+    "empty_state": "https://images.unsplash.com/photo-1628571201631-4065b45e496c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjB2aWRlbyUyMGNhbWVyYSUyMHN0dWRpb3xlbnwwfHx8fDE3NjkzNzEzNTV8MA&ixlib=rb-4.1.0&q=85"
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'lucide-react' for icons. Use 'Outfit' font for headings and 'Plus Jakarta Sans' for body.",
+    "2. THEME: Implement the Red/Black/White palette. This is CRITICAL for the 'Rhema' brand identity.",
+    "3. LAYOUT: Create a SidebarLayout component that wraps the main content. The sidebar should be dark (#2B2D42) with white text.",
+    "4. DASHBOARD: Use a Bento Grid layout. Top left: Welcome/Stats. Top Right: Next Schedule. Bottom: Pending Approvals.",
+    "5. SCHEDULES: The 'Escalas' page is the core. Use a Calendar view (react-big-calendar or custom grid) where users can click to confirm attendance.",
+    "6. VOTING: Create a 'ContentApproval' component. It needs a progress bar (Shadcn Progress) that fills up as people vote. Threshold is 50%.",
+    "7. MOBILE: Ensure the 'Confirm Attendance' button is huge and easily accessible on mobile views.",
+    "8. IMAGES: Use the provided image_urls for the login page and dashboard headers. Do not use placeholders.",
+    "9. DATA-TESTID: Add data-testid to all interactive elements (buttons, inputs, cards) for testing."
+  ],
+  "universal_guidelines": [
+    "Avoid generic 'AI slop' designs. Use generous spacing (p-6+).",
+    "Micro-interactions are mandatory. Hover states on everything.",
+    "No gradients on text unless it's a very subtle title effect.",
+    "Use 'sonner' for toast notifications.",
+    "Keep the UI clean but professional. Think 'Creative Agency' meets 'Church Community'."
+  ]
+}
