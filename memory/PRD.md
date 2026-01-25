@@ -88,6 +88,15 @@ Sistema de gerenciamento de mídia para igreja Rhema Brasil de Vitória, incluin
   - Página de links e recursos
   - Configurações com assistente IA
 
+### January 2026 - Gamificação
+- **Sistema de Gamificação completo**:
+  - 15 medalhas conquistáveis
+  - Sistema de pontos por interação
+  - 10 níveis (Iniciante → Supremo)
+  - Ranking/Leaderboard da equipe
+  - Página dedicada /gamification
+  - Pontos por: confirmar presença (+10), votar (+5), enviar conteúdo (+15), conteúdo aprovado (+50), adicionar links (+10), usar IA (+5)
+
 ## 📊 Prioritized Backlog
 
 ### P0 (Crítico)
@@ -97,6 +106,7 @@ Sistema de gerenciamento de mídia para igreja Rhema Brasil de Vitória, incluin
 - [x] Dashboard básico
 
 ### P1 (Alta Prioridade)
+- [x] Sistema de Gamificação com medalhas, pontos e ranking
 - [ ] Integração completa Google Calendar (criar eventos)
 - [ ] Notificações WhatsApp via Twilio
 - [ ] Upload de imagens para membros
