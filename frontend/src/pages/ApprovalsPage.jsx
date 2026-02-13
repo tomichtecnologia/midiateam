@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import {
   Plus,
   ThumbsUp,
@@ -25,7 +26,12 @@ import {
   Sparkles,
   Users,
   Vote,
-  AlertCircle
+  AlertCircle,
+  MoreVertical,
+  RotateCcw,
+  Trash2,
+  UserMinus,
+  Shield
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -55,7 +61,7 @@ const statusLabels = {
   rejected: { label: "Rejeitado", variant: "destructive", icon: XCircle }
 };
 
-const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote }) => {
+const ApprovalCard = ({ approval, onVote, onAdminAction, currentUserId, totalVoters, canVote, isAdmin, members }) => {
   const ContentIcon = contentTypeIcons[approval.content_type] || FileText;
   const statusInfo = statusLabels[approval.status] || statusLabels.pending;
   const StatusIcon = statusInfo.icon;
@@ -68,6 +74,17 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote })
 
   const hasVotedFor = approval.votes_for?.includes(currentUserId);
   const hasVotedAgainst = approval.votes_against?.includes(currentUserId);
+
+  // Get voter names
+  const getVoterNames = (voterIds) => {
+    return voterIds?.map(id => {
+      const member = members.find(m => m.user_id === id);
+      return member?.name || "Desconhecido";
+    }) || [];
+  };
+
+  const votersForNames = getVoterNames(approval.votes_for);
+  const votersAgainstNames = getVoterNames(approval.votes_against);
 
   return (
     <Card className="card-hover overflow-hidden" data-testid={`approval-card-${approval.approval_id}`}>
@@ -85,11 +102,34 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote })
               {contentTypeLabels[approval.content_type]}
             </Badge>
           </div>
-          <div className="absolute top-2 right-2">
+          <div className="absolute top-2 right-2 flex gap-2">
             <Badge variant={statusInfo.variant} className="flex items-center gap-1">
               <StatusIcon className="w-3 h-3" />
               {statusInfo.label}
             </Badge>
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" size="icon" className="h-6 w-6">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onAdminAction(approval.approval_id, "reset")}>
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Reiniciar Votação
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => onAdminAction(approval.approval_id, "delete")}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir Aprovação
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       ) : (
@@ -101,11 +141,34 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote })
               {contentTypeLabels[approval.content_type]}
             </Badge>
           </div>
-          <div className="absolute top-2 right-2">
+          <div className="absolute top-2 right-2 flex gap-2">
             <Badge variant={statusInfo.variant} className="flex items-center gap-1">
               <StatusIcon className="w-3 h-3" />
               {statusInfo.label}
             </Badge>
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="secondary" size="icon" className="h-6 w-6">
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onAdminAction(approval.approval_id, "reset")}>
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Reiniciar Votação
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => onAdminAction(approval.approval_id, "delete")}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir Aprovação
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </div>
       )}
@@ -146,17 +209,62 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote })
             </span>
           </div>
 
-          {/* Votes breakdown */}
-          <div className="flex justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <ThumbsUp className="w-3 h-3 text-green-500" />
-              {votesFor} votos a favor
-            </span>
-            <span>50% necessário</span>
-            <span className="flex items-center gap-1">
-              <ThumbsDown className="w-3 h-3 text-red-500" />
-              {votesAgainst} votos contra
-            </span>
+          {/* Votes breakdown with names for admin */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span className="flex items-center gap-1">
+                <ThumbsUp className="w-3 h-3 text-green-500" />
+                {votesFor} a favor
+              </span>
+              <span>50% necessário</span>
+              <span className="flex items-center gap-1">
+                <ThumbsDown className="w-3 h-3 text-red-500" />
+                {votesAgainst} contra
+              </span>
+            </div>
+
+            {/* Admin: Show who voted */}
+            {isAdmin && totalVotes > 0 && (
+              <div className="p-3 bg-muted/30 rounded-lg space-y-2 text-xs">
+                {votersForNames.length > 0 && (
+                  <div>
+                    <span className="text-green-600 font-medium">A favor: </span>
+                    {votersForNames.map((name, i) => (
+                      <Badge 
+                        key={i} 
+                        variant="outline" 
+                        className="mr-1 mb-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => {
+                          const userId = approval.votes_for[i];
+                          onAdminAction(approval.approval_id, "revoke", userId);
+                        }}
+                      >
+                        {name} <XCircle className="w-3 h-3 ml-1" />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                {votersAgainstNames.length > 0 && (
+                  <div>
+                    <span className="text-red-600 font-medium">Contra: </span>
+                    {votersAgainstNames.map((name, i) => (
+                      <Badge 
+                        key={i} 
+                        variant="outline" 
+                        className="mr-1 mb-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
+                        onClick={() => {
+                          const userId = approval.votes_against[i];
+                          onAdminAction(approval.approval_id, "revoke", userId);
+                        }}
+                      >
+                        {name} <XCircle className="w-3 h-3 ml-1" />
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+                <p className="text-muted-foreground italic">Clique no nome para estornar o voto</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -190,7 +298,7 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote })
               <Alert className="bg-amber-50 border-amber-200">
                 <AlertCircle className="h-4 w-4 text-amber-600" />
                 <AlertDescription className="text-amber-700 text-sm">
-                  Você não tem permissão para votar. Contate um administrador.
+                  Você não tem permissão para votar.
                 </AlertDescription>
               </Alert>
             )}
@@ -212,11 +320,12 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote })
 
 export default function ApprovalsPage() {
   const [approvals, setApprovals] = useState([]);
+  const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("pending");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [votingStats, setVotingStats] = useState({ total_voters: 0, can_vote: false });
+  const [votingStats, setVotingStats] = useState({ total_voters: 0, can_vote: false, is_admin: false });
 
   const [formData, setFormData] = useState({
     title: "",
@@ -232,15 +341,17 @@ export default function ApprovalsPage() {
 
   const fetchData = async () => {
     try {
-      const [approvalsRes, userRes, statsRes] = await Promise.all([
+      const [approvalsRes, userRes, statsRes, membersRes] = await Promise.all([
         axios.get(`${API}/approvals`, { withCredentials: true }),
         axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/approvals/voting-stats`, { withCredentials: true })
+        axios.get(`${API}/approvals/voting-stats`, { withCredentials: true }),
+        axios.get(`${API}/members`, { withCredentials: true })
       ]);
 
       setApprovals(approvalsRes.data);
       setCurrentUser(userRes.data);
       setVotingStats(statsRes.data);
+      setMembers(membersRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
@@ -287,6 +398,31 @@ export default function ApprovalsPage() {
     }
   };
 
+  const handleAdminAction = async (approvalId, action, userId = null) => {
+    try {
+      if (action === "reset") {
+        if (!window.confirm("Tem certeza que deseja reiniciar a votação? Todos os votos serão removidos.")) return;
+        await axios.post(`${API}/admin/approvals/${approvalId}/reset-votes`, {}, { withCredentials: true });
+        toast.success("Votação reiniciada com sucesso!");
+      } else if (action === "delete") {
+        if (!window.confirm("Tem certeza que deseja excluir esta aprovação? Esta ação não pode ser desfeita.")) return;
+        await axios.delete(`${API}/admin/approvals/${approvalId}`, { withCredentials: true });
+        toast.success("Aprovação excluída com sucesso!");
+      } else if (action === "revoke" && userId) {
+        await axios.post(`${API}/admin/approvals/${approvalId}/revoke-vote`, { user_id: userId }, { withCredentials: true });
+        toast.success("Voto estornado com sucesso!");
+      }
+      fetchData();
+    } catch (error) {
+      console.error("Error on admin action:", error);
+      if (error.response?.status === 403) {
+        toast.error("Apenas administradores podem realizar esta ação");
+      } else {
+        toast.error("Erro ao executar ação");
+      }
+    }
+  };
+
   const filteredApprovals = approvals.filter((approval) => {
     if (activeTab === "all") return true;
     return approval.status === activeTab;
@@ -315,7 +451,15 @@ export default function ApprovalsPage() {
             Vote nos conteúdos para aprovação
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Admin Badge */}
+          {votingStats.is_admin && (
+            <Badge className="bg-amber-500 flex items-center gap-1">
+              <Shield className="w-3 h-3" />
+              Modo Admin
+            </Badge>
+          )}
+
           {/* Voting Stats Card */}
           <Card className="border-green-200 bg-green-50">
             <CardContent className="py-3 px-4 flex items-center gap-3">
@@ -411,12 +555,21 @@ export default function ApprovalsPage() {
         </div>
       </div>
 
-      {/* Info Alert */}
-      {!votingStats.can_vote && (
+      {/* Info Alerts */}
+      {!votingStats.can_vote && !votingStats.is_admin && (
         <Alert className="bg-amber-50 border-amber-200">
           <AlertCircle className="h-4 w-4 text-amber-600" />
           <AlertDescription className="text-amber-700">
-            Você não está habilitado para votar. Para votar nas aprovações, um administrador precisa ativar essa permissão no seu cadastro de membro.
+            Você não está habilitado para votar. Um administrador precisa ativar essa permissão.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {votingStats.is_admin && (
+        <Alert className="bg-amber-50 border-amber-200">
+          <Shield className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-700">
+            <strong>Modo Admin:</strong> Você pode estornar votos (clique no nome do votante), reiniciar votações ou excluir aprovações usando o menu ⋮
           </AlertDescription>
         </Alert>
       )}
@@ -457,9 +610,12 @@ export default function ApprovalsPage() {
               key={approval.approval_id}
               approval={approval}
               onVote={handleVote}
+              onAdminAction={handleAdminAction}
               currentUserId={currentUser?.user_id}
               totalVoters={votingStats.total_voters}
               canVote={votingStats.can_vote}
+              isAdmin={votingStats.is_admin}
+              members={members}
             />
           ))}
         </div>
