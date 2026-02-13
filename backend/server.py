@@ -721,8 +721,15 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
     if approval["status"] != "pending":
         raise HTTPException(status_code=400, detail="Voting is closed")
     
-    # Check if first vote
+    # Check if user can vote
     member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=403, detail="Member not found")
+    
+    if not member.get("can_vote", False):
+        raise HTTPException(status_code=403, detail="Você não tem permissão para votar")
+    
+    # Check if first vote
     is_first_vote = "first_vote" not in member.get("badges", [])
     
     await db.content_approvals.update_one(
@@ -761,14 +768,15 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
     if total_votes >= 10:
         await award_badge(user.user_id, "voter_10")
     
-    # Check if approval threshold reached
+    # Check if approval threshold reached (50% of voters who CAN vote)
     updated = await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
-    total_members = await db.members.count_documents({"active": True})
+    total_voters = await db.members.count_documents({"active": True, "can_vote": True})
     total_votes_count = len(updated["votes_for"]) + len(updated["votes_against"])
     
-    if total_votes_count > 0 and total_members > 0:
+    if total_votes_count > 0 and total_voters > 0:
         approval_percentage = len(updated["votes_for"]) / total_votes_count * 100
-        if approval_percentage > 50 and total_votes_count >= max(1, total_members // 2):
+        # Require at least half of eligible voters to have voted
+        if approval_percentage > 50 and total_votes_count >= max(1, total_voters // 2):
             await db.content_approvals.update_one(
                 {"approval_id": approval_id},
                 {"$set": {"status": "approved"}}
@@ -786,11 +794,28 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
             if approved_count >= 5:
                 await award_badge(creator_user_id, "content_5_approved")
                 
-        elif approval_percentage < 50 and total_votes_count >= max(1, total_members // 2):
+        elif approval_percentage < 50 and total_votes_count >= max(1, total_voters // 2):
             await db.content_approvals.update_one(
                 {"approval_id": approval_id},
                 {"$set": {"status": "rejected"}}
             )
+    
+    return await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
+
+# Endpoint para obter estatísticas de votação
+@api_router.get("/approvals/voting-stats")
+async def get_voting_stats(user: User = Depends(get_current_user)):
+    """Get voting statistics"""
+    total_voters = await db.members.count_documents({"active": True, "can_vote": True})
+    
+    # Check if current user can vote
+    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    can_vote = member.get("can_vote", False) if member else False
+    
+    return {
+        "total_voters": total_voters,
+        "can_vote": can_vote
+    }
     
     return await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
 
