@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import uuid
 
 class RhemaAPITester:
-    def __init__(self, base_url="https://rhemacast.preview.emergentagent.com"):
+    def __init__(self, base_url="https://media-management-1.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_url = f"{base_url}/api"
         self.session_token = None
