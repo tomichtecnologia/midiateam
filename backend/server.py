@@ -515,20 +515,84 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
 
 @api_router.post("/schedules")
 async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(get_current_user)):
-    """Create a new schedule"""
+    """Create a new schedule with optional recurrence"""
     schedule_date = datetime.fromisoformat(schedule_data.date)
     deadline = schedule_date - timedelta(days=1)
     
-    schedule = Schedule(
+    schedules_to_create = []
+    
+    # Create main schedule
+    main_schedule = Schedule(
         **schedule_data.model_dump(),
         confirmation_deadline=deadline.isoformat(),
         created_by=user.user_id
     )
-    doc = schedule.model_dump()
-    doc["created_at"] = doc["created_at"].isoformat()
-    await db.schedules.insert_one(doc)
     
-    result = await db.schedules.find_one({"schedule_id": doc["schedule_id"]}, {"_id": 0})
+    # If recurring, create future instances
+    if schedule_data.repeat_type != "none" and schedule_data.repeat_until:
+        repeat_until = datetime.fromisoformat(schedule_data.repeat_until)
+        current_date = schedule_date
+        parent_id = main_schedule.schedule_id
+        
+        day_map = {
+            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+            "friday": 4, "saturday": 5, "sunday": 6
+        }
+        
+        while current_date <= repeat_until:
+            should_create = False
+            
+            if schedule_data.repeat_type == "daily":
+                should_create = True
+            elif schedule_data.repeat_type == "weekly":
+                day_name = list(day_map.keys())[current_date.weekday()]
+                should_create = day_name in schedule_data.repeat_days
+            elif schedule_data.repeat_type == "monthly":
+                should_create = current_date.day == schedule_date.day
+            
+            if should_create:
+                instance_deadline = current_date - timedelta(days=1)
+                instance = Schedule(
+                    title=schedule_data.title,
+                    description=schedule_data.description,
+                    schedule_type=schedule_data.schedule_type,
+                    date=current_date.isoformat()[:10],
+                    start_time=schedule_data.start_time,
+                    end_time=schedule_data.end_time,
+                    assigned_members=schedule_data.assigned_members.copy(),
+                    confirmation_deadline=instance_deadline.isoformat(),
+                    repeat_type=schedule_data.repeat_type,
+                    repeat_days=schedule_data.repeat_days,
+                    repeat_until=schedule_data.repeat_until,
+                    parent_schedule_id=parent_id if current_date != schedule_date else None,
+                    created_by=user.user_id
+                )
+                doc = instance.model_dump()
+                doc["created_at"] = doc["created_at"].isoformat()
+                schedules_to_create.append(doc)
+            
+            # Advance date
+            if schedule_data.repeat_type == "daily":
+                current_date += timedelta(days=1)
+            elif schedule_data.repeat_type == "weekly":
+                current_date += timedelta(days=1)
+            elif schedule_data.repeat_type == "monthly":
+                # Move to next month
+                if current_date.month == 12:
+                    current_date = current_date.replace(year=current_date.year + 1, month=1)
+                else:
+                    current_date = current_date.replace(month=current_date.month + 1)
+    else:
+        # Single schedule
+        doc = main_schedule.model_dump()
+        doc["created_at"] = doc["created_at"].isoformat()
+        schedules_to_create.append(doc)
+    
+    # Insert all schedules
+    if schedules_to_create:
+        await db.schedules.insert_many(schedules_to_create)
+    
+    result = await db.schedules.find_one({"schedule_id": schedules_to_create[0]["schedule_id"]}, {"_id": 0})
     return result
 
 @api_router.put("/schedules/{schedule_id}")
