@@ -56,6 +56,7 @@ class Member(BaseModel):
     role: str = "operator"
     department: str = "production"
     active: bool = True
+    can_vote: bool = False  # Pode votar nas aprovações
     # Gamification fields
     points: int = 0
     badges: List[str] = []
@@ -69,6 +70,7 @@ class MemberCreate(BaseModel):
     picture: Optional[str] = None
     role: str = "operator"
     department: str = "production"
+    can_vote: bool = False
 
 class Schedule(BaseModel):
     model_config = ConfigDict(extra="ignore")
