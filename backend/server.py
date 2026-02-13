@@ -35,6 +35,21 @@ logger = logging.getLogger(__name__)
 
 # ============== MODELS ==============
 
+class Entity(BaseModel):
+    """Entidade/Empresa"""
+    model_config = ConfigDict(extra="ignore")
+    entity_id: str = Field(default_factory=lambda: f"entity_{uuid.uuid4().hex[:12]}")
+    name: str
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class EntityCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
     user_id: str
@@ -43,12 +58,16 @@ class User(BaseModel):
     picture: Optional[str] = None
     phone: Optional[str] = None
     role: str = "member"
+    is_admin: bool = False
+    entities: List[str] = []  # Lista de entity_ids
+    current_entity: Optional[str] = None  # Entidade atual selecionada
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class Member(BaseModel):
     model_config = ConfigDict(extra="ignore")
     member_id: str = Field(default_factory=lambda: f"member_{uuid.uuid4().hex[:12]}")
     user_id: Optional[str] = None
+    entity_id: str  # Entidade a qual pertence
     name: str
     email: str
     phone: Optional[str] = None
@@ -56,7 +75,8 @@ class Member(BaseModel):
     role: str = "operator"
     department: str = "production"
     active: bool = True
-    can_vote: bool = False  # Pode votar nas aprovações
+    is_admin: bool = False
+    can_vote: bool = False
     # Gamification fields
     points: int = 0
     badges: List[str] = []
@@ -70,14 +90,17 @@ class MemberCreate(BaseModel):
     picture: Optional[str] = None
     role: str = "operator"
     department: str = "production"
+    is_admin: bool = False
     can_vote: bool = False
+    entity_id: Optional[str] = None  # Se não informado, usa a entidade atual do usuário
 
 class Schedule(BaseModel):
     model_config = ConfigDict(extra="ignore")
     schedule_id: str = Field(default_factory=lambda: f"schedule_{uuid.uuid4().hex[:12]}")
+    entity_id: str  # Entidade a qual pertence
     title: str
     description: Optional[str] = None
-    schedule_type: str  # class (aulas) or content (postagens)
+    schedule_type: str
     date: str
     start_time: str
     end_time: str
@@ -86,11 +109,10 @@ class Schedule(BaseModel):
     declined_members: List[str] = []
     substitutes: dict = {}
     confirmation_deadline: str
-    # Repeat fields
-    repeat_type: str = "none"  # none, daily, weekly, monthly
-    repeat_days: List[str] = []  # for weekly: ["monday", "wednesday", "friday"]
+    repeat_type: str = "none"
+    repeat_days: List[str] = []
     repeat_until: Optional[str] = None
-    parent_schedule_id: Optional[str] = None  # For recurring instances
+    parent_schedule_id: Optional[str] = None
     created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -115,6 +137,7 @@ class AttendanceConfirmation(BaseModel):
 class ContentApproval(BaseModel):
     model_config = ConfigDict(extra="ignore")
     approval_id: str = Field(default_factory=lambda: f"approval_{uuid.uuid4().hex[:12]}")
+    entity_id: str  # Entidade a qual pertence
     title: str
     description: str
     content_type: str
@@ -140,6 +163,7 @@ class Vote(BaseModel):
 class Link(BaseModel):
     model_config = ConfigDict(extra="ignore")
     link_id: str = Field(default_factory=lambda: f"link_{uuid.uuid4().hex[:12]}")
+    entity_id: str  # Entidade a qual pertence
     title: str
     url: str
     category: str
@@ -178,69 +202,53 @@ BADGES = {
 }
 
 def calculate_level(points: int) -> int:
-    """Calculate level based on points"""
-    if points < 50:
-        return 1
-    elif points < 150:
-        return 2
-    elif points < 300:
-        return 3
-    elif points < 500:
-        return 4
-    elif points < 750:
-        return 5
-    elif points < 1000:
-        return 6
-    elif points < 1500:
-        return 7
-    elif points < 2000:
-        return 8
-    elif points < 3000:
-        return 9
-    else:
-        return 10
+    if points < 50: return 1
+    elif points < 150: return 2
+    elif points < 300: return 3
+    elif points < 500: return 4
+    elif points < 750: return 5
+    elif points < 1000: return 6
+    elif points < 1500: return 7
+    elif points < 2000: return 8
+    elif points < 3000: return 9
+    else: return 10
 
-async def award_badge(user_id: str, badge_id: str):
-    """Award a badge to a user and add points"""
+async def award_badge(user_id: str, badge_id: str, entity_id: str):
     if badge_id not in BADGES:
         return
     
     badge = BADGES[badge_id]
-    member = await db.members.find_one({"user_id": user_id}, {"_id": 0})
+    member = await db.members.find_one({"user_id": user_id, "entity_id": entity_id}, {"_id": 0})
     if not member:
         return
     
     if badge_id in member.get("badges", []):
-        return  # Already has badge
+        return
     
     new_points = member.get("points", 0) + badge["points"]
     new_level = calculate_level(new_points)
     
     await db.members.update_one(
-        {"user_id": user_id},
+        {"user_id": user_id, "entity_id": entity_id},
         {
             "$addToSet": {"badges": badge_id},
             "$set": {"points": new_points, "level": new_level}
         }
     )
     
-    # Check for level badges
     if new_level >= 5 and "level_5" not in member.get("badges", []):
         await db.members.update_one(
-            {"user_id": user_id},
+            {"user_id": user_id, "entity_id": entity_id},
             {"$addToSet": {"badges": "level_5"}}
         )
     if new_level >= 10 and "level_10" not in member.get("badges", []):
         await db.members.update_one(
-            {"user_id": user_id},
+            {"user_id": user_id, "entity_id": entity_id},
             {"$addToSet": {"badges": "level_10"}}
         )
-    
-    return {"badge": badge, "new_points": new_points, "new_level": new_level}
 
-async def add_points(user_id: str, points: int):
-    """Add points to a user"""
-    member = await db.members.find_one({"user_id": user_id}, {"_id": 0})
+async def add_points(user_id: str, points: int, entity_id: str):
+    member = await db.members.find_one({"user_id": user_id, "entity_id": entity_id}, {"_id": 0})
     if not member:
         return
     
@@ -248,14 +256,13 @@ async def add_points(user_id: str, points: int):
     new_level = calculate_level(new_points)
     
     await db.members.update_one(
-        {"user_id": user_id},
+        {"user_id": user_id, "entity_id": entity_id},
         {"$set": {"points": new_points, "level": new_level}}
     )
 
 # ============== AUTH HELPERS ==============
 
 async def get_current_user(request: Request) -> User:
-    """Get current user from session token"""
     session_token = request.cookies.get("session_token")
     if not session_token:
         auth_header = request.headers.get("Authorization")
@@ -291,11 +298,36 @@ async def get_current_user(request: Request) -> User:
     
     return User(**user)
 
+async def get_current_entity_id(user: User) -> str:
+    """Retorna a entidade atual do usuário"""
+    if user.current_entity:
+        return user.current_entity
+    if user.entities:
+        return user.entities[0]
+    # Se não tem entidade, cria uma padrão
+    default_entity = await db.entities.find_one({"name": "Padrão"}, {"_id": 0})
+    if not default_entity:
+        entity = Entity(name="Padrão", description="Entidade padrão do sistema")
+        doc = entity.model_dump()
+        doc["created_at"] = doc["created_at"].isoformat()
+        await db.entities.insert_one(doc)
+        default_entity = doc
+    return default_entity["entity_id"]
+
+async def check_admin(user: User, entity_id: str):
+    """Verifica se o usuário é admin da entidade"""
+    member = await db.members.find_one(
+        {"user_id": user.user_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not member or not member.get("is_admin", False):
+        raise HTTPException(status_code=403, detail="Acesso negado. Apenas administradores podem realizar esta ação.")
+    return True
+
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
-    """Exchange session_id for session_token"""
     data = await request.json()
     session_id = data.get("session_id")
     
@@ -314,7 +346,17 @@ async def create_session(request: Request, response: Response):
         auth_data = auth_response.json()
     
     user_id = f"user_{uuid.uuid4().hex[:12]}"
-    is_new_user = False
+    
+    # Buscar ou criar entidade padrão
+    default_entity = await db.entities.find_one({"name": "Padrão"}, {"_id": 0})
+    if not default_entity:
+        entity = Entity(name="Padrão", description="Entidade padrão do sistema")
+        doc = entity.model_dump()
+        doc["created_at"] = doc["created_at"].isoformat()
+        await db.entities.insert_one(doc)
+        default_entity = await db.entities.find_one({"name": "Padrão"}, {"_id": 0})
+    
+    entity_id = default_entity["entity_id"]
     
     existing_user = await db.users.find_one({"email": auth_data["email"]}, {"_id": 0})
     
@@ -327,28 +369,44 @@ async def create_session(request: Request, response: Response):
                 "picture": auth_data.get("picture")
             }}
         )
+        # Verificar se já tem entidade
+        if not existing_user.get("entities"):
+            await db.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"entities": [entity_id], "current_entity": entity_id}}
+            )
     else:
-        is_new_user = True
+        # Verificar se é o primeiro usuário (será admin)
+        user_count = await db.users.count_documents({})
+        is_first_user = user_count == 0
+        
         new_user = {
             "user_id": user_id,
             "email": auth_data["email"],
             "name": auth_data["name"],
             "picture": auth_data.get("picture"),
-            "role": "member",
+            "role": "admin" if is_first_user else "member",
+            "is_admin": is_first_user,
+            "entities": [entity_id],
+            "current_entity": entity_id,
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         await db.users.insert_one(new_user)
         
+        # Criar membro na entidade
         member = {
             "member_id": f"member_{uuid.uuid4().hex[:12]}",
             "user_id": user_id,
+            "entity_id": entity_id,
             "name": auth_data["name"],
             "email": auth_data["email"],
             "picture": auth_data.get("picture"),
             "role": "operator",
             "department": "production",
             "active": True,
-            "points": 10,  # First login points
+            "is_admin": is_first_user,
+            "can_vote": is_first_user,
+            "points": 10,
             "badges": ["first_login"],
             "level": 1,
             "created_at": datetime.now(timezone.utc).isoformat()
@@ -376,16 +434,35 @@ async def create_session(request: Request, response: Response):
     )
     
     user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    # Adicionar info do membro
+    member = await db.members.find_one(
+        {"user_id": user_id, "entity_id": user.get("current_entity")},
+        {"_id": 0}
+    )
+    if member:
+        user["is_admin"] = member.get("is_admin", False)
+    
     return user
 
 @api_router.get("/auth/me")
 async def get_me(user: User = Depends(get_current_user)):
-    """Get current authenticated user"""
-    return user.model_dump()
+    entity_id = await get_current_entity_id(user)
+    member = await db.members.find_one(
+        {"user_id": user.user_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    
+    result = user.model_dump()
+    if member:
+        result["is_admin"] = member.get("is_admin", False)
+        result["can_vote"] = member.get("can_vote", False)
+        result["member_id"] = member.get("member_id")
+    
+    return result
 
 @api_router.post("/auth/logout")
 async def logout(request: Request, response: Response):
-    """Logout user"""
     session_token = request.cookies.get("session_token")
     if session_token:
         await db.user_sessions.delete_one({"session_token": session_token})
@@ -393,43 +470,112 @@ async def logout(request: Request, response: Response):
     response.delete_cookie(key="session_token", path="/")
     return {"message": "Logged out successfully"}
 
+@api_router.post("/auth/switch-entity/{entity_id}")
+async def switch_entity(entity_id: str, user: User = Depends(get_current_user)):
+    """Trocar de entidade"""
+    if entity_id not in user.entities:
+        raise HTTPException(status_code=403, detail="Você não tem acesso a esta entidade")
+    
+    await db.users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"current_entity": entity_id}}
+    )
+    
+    return {"message": "Entidade alterada com sucesso", "current_entity": entity_id}
+
+# ============== ENTITY ROUTES ==============
+
+@api_router.get("/entities")
+async def get_entities(user: User = Depends(get_current_user)):
+    """Lista entidades do usuário"""
+    entities = await db.entities.find(
+        {"entity_id": {"$in": user.entities}},
+        {"_id": 0}
+    ).to_list(100)
+    return entities
+
+@api_router.get("/entities/all")
+async def get_all_entities(user: User = Depends(get_current_user)):
+    """Lista todas as entidades (admin global)"""
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    entities = await db.entities.find({}, {"_id": 0}).to_list(1000)
+    return entities
+
+@api_router.post("/entities")
+async def create_entity(entity_data: EntityCreate, user: User = Depends(get_current_user)):
+    """Criar nova entidade (admin)"""
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    entity = Entity(**entity_data.model_dump())
+    doc = entity.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.entities.insert_one(doc)
+    
+    return await db.entities.find_one({"entity_id": doc["entity_id"]}, {"_id": 0})
+
+@api_router.put("/entities/{entity_id}")
+async def update_entity(entity_id: str, entity_data: EntityCreate, user: User = Depends(get_current_user)):
+    """Atualizar entidade (admin)"""
+    current_entity = await get_current_entity_id(user)
+    await check_admin(user, current_entity)
+    
+    result = await db.entities.update_one(
+        {"entity_id": entity_id},
+        {"$set": entity_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Entidade não encontrada")
+    
+    return await db.entities.find_one({"entity_id": entity_id}, {"_id": 0})
+
 # ============== MEMBERS ROUTES ==============
 
-@api_router.get("/members", response_model=List[dict])
+@api_router.get("/members")
 async def get_members(user: User = Depends(get_current_user)):
-    """Get all members"""
-    members = await db.members.find({"active": True}, {"_id": 0}).to_list(1000)
+    entity_id = await get_current_entity_id(user)
+    members = await db.members.find(
+        {"entity_id": entity_id, "active": True},
+        {"_id": 0}
+    ).to_list(1000)
     return members
 
 @api_router.get("/members/{member_id}")
 async def get_member(member_id: str, user: User = Depends(get_current_user)):
-    """Get a specific member"""
-    member = await db.members.find_one({"member_id": member_id}, {"_id": 0})
+    entity_id = await get_current_entity_id(user)
+    member = await db.members.find_one(
+        {"member_id": member_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")
     return member
 
 @api_router.post("/members")
 async def create_member(member_data: MemberCreate, user: User = Depends(get_current_user)):
-    """Create a new member"""
+    entity_id = member_data.entity_id or await get_current_entity_id(user)
+    
     member = Member(
-        user_id=None,  # Will be linked when they login
-        **member_data.model_dump()
+        user_id=None,
+        entity_id=entity_id,
+        **{k: v for k, v in member_data.model_dump().items() if k != "entity_id"}
     )
     doc = member.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.members.insert_one(doc)
     
-    # Return without _id
-    result = await db.members.find_one({"member_id": doc["member_id"]}, {"_id": 0})
-    return result
+    return await db.members.find_one({"member_id": doc["member_id"]}, {"_id": 0})
 
 @api_router.put("/members/{member_id}")
 async def update_member(member_id: str, member_data: MemberCreate, user: User = Depends(get_current_user)):
-    """Update a member"""
+    entity_id = await get_current_entity_id(user)
+    
+    update_data = {k: v for k, v in member_data.model_dump().items() if k != "entity_id"}
     result = await db.members.update_one(
-        {"member_id": member_id},
-        {"$set": member_data.model_dump()}
+        {"member_id": member_id, "entity_id": entity_id},
+        {"$set": update_data}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Member not found")
@@ -437,63 +583,109 @@ async def update_member(member_id: str, member_data: MemberCreate, user: User = 
 
 @api_router.delete("/members/{member_id}")
 async def delete_member(member_id: str, user: User = Depends(get_current_user)):
-    """Soft delete a member"""
+    entity_id = await get_current_entity_id(user)
     result = await db.members.update_one(
-        {"member_id": member_id},
+        {"member_id": member_id, "entity_id": entity_id},
         {"$set": {"active": False}}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Member not found")
     return {"message": "Member deleted"}
 
-# ============== GAMIFICATION ROUTES ==============
+# Admin: Mover membro para outra entidade
+@api_router.post("/admin/members/{member_id}/move-entity")
+async def move_member_entity(member_id: str, request: Request, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    data = await request.json()
+    new_entity_id = data.get("entity_id")
+    
+    if not new_entity_id:
+        raise HTTPException(status_code=400, detail="entity_id é obrigatório")
+    
+    # Verificar se entidade existe
+    entity = await db.entities.find_one({"entity_id": new_entity_id}, {"_id": 0})
+    if not entity:
+        raise HTTPException(status_code=404, detail="Entidade não encontrada")
+    
+    result = await db.members.update_one(
+        {"member_id": member_id},
+        {"$set": {"entity_id": new_entity_id}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    
+    return {"message": "Membro movido com sucesso"}
 
-@api_router.get("/gamification/leaderboard")
-async def get_leaderboard(user: User = Depends(get_current_user)):
-    """Get gamification leaderboard"""
-    members = await db.members.find(
-        {"active": True},
-        {"_id": 0, "member_id": 1, "name": 1, "picture": 1, "points": 1, "level": 1, "badges": 1}
-    ).sort("points", -1).limit(20).to_list(20)
-    return members
-
-@api_router.get("/gamification/badges")
-async def get_all_badges(user: User = Depends(get_current_user)):
-    """Get all available badges"""
-    return BADGES
-
-@api_router.get("/gamification/my-stats")
-async def get_my_stats(user: User = Depends(get_current_user)):
-    """Get current user's gamification stats"""
-    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+# Admin: Adicionar membro a outra entidade
+@api_router.post("/admin/members/{member_id}/add-entity")
+async def add_member_entity(member_id: str, request: Request, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    data = await request.json()
+    new_entity_id = data.get("entity_id")
+    
+    if not new_entity_id:
+        raise HTTPException(status_code=400, detail="entity_id é obrigatório")
+    
+    # Buscar membro original
+    member = await db.members.find_one({"member_id": member_id}, {"_id": 0})
     if not member:
-        return {"points": 0, "level": 1, "badges": [], "rank": 0}
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
     
-    # Get rank
-    higher_count = await db.members.count_documents({
+    # Verificar se já existe nessa entidade
+    existing = await db.members.find_one(
+        {"user_id": member.get("user_id"), "entity_id": new_entity_id},
+        {"_id": 0}
+    )
+    if existing:
+        raise HTTPException(status_code=400, detail="Membro já existe nesta entidade")
+    
+    # Criar cópia do membro na nova entidade
+    new_member = {
+        "member_id": f"member_{uuid.uuid4().hex[:12]}",
+        "user_id": member.get("user_id"),
+        "entity_id": new_entity_id,
+        "name": member["name"],
+        "email": member["email"],
+        "phone": member.get("phone"),
+        "picture": member.get("picture"),
+        "role": member["role"],
+        "department": member["department"],
         "active": True,
-        "points": {"$gt": member.get("points", 0)}
-    })
-    
-    return {
-        "points": member.get("points", 0),
-        "level": member.get("level", 1),
-        "badges": member.get("badges", []),
-        "rank": higher_count + 1,
-        "badges_info": {b: BADGES[b] for b in member.get("badges", []) if b in BADGES}
+        "is_admin": False,
+        "can_vote": False,
+        "points": 0,
+        "badges": [],
+        "level": 1,
+        "created_at": datetime.now(timezone.utc).isoformat()
     }
+    await db.members.insert_one(new_member)
+    
+    # Atualizar usuário com nova entidade
+    if member.get("user_id"):
+        await db.users.update_one(
+            {"user_id": member["user_id"]},
+            {"$addToSet": {"entities": new_entity_id}}
+        )
+    
+    return {"message": "Membro adicionado à entidade com sucesso"}
 
 # ============== SCHEDULES ROUTES ==============
 
-@api_router.get("/schedules", response_model=List[dict])
+@api_router.get("/schedules")
 async def get_schedules(
     schedule_type: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     user: User = Depends(get_current_user)
 ):
-    """Get schedules with optional filters"""
-    query = {}
+    entity_id = await get_current_entity_id(user)
+    query = {"entity_id": entity_id}
+    
     if schedule_type:
         query["schedule_type"] = schedule_type
     if start_date:
@@ -509,28 +701,30 @@ async def get_schedules(
 
 @api_router.get("/schedules/{schedule_id}")
 async def get_schedule(schedule_id: str, user: User = Depends(get_current_user)):
-    """Get a specific schedule"""
-    schedule = await db.schedules.find_one({"schedule_id": schedule_id}, {"_id": 0})
+    entity_id = await get_current_entity_id(user)
+    schedule = await db.schedules.find_one(
+        {"schedule_id": schedule_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return schedule
 
 @api_router.post("/schedules")
 async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(get_current_user)):
-    """Create a new schedule with optional recurrence"""
+    entity_id = await get_current_entity_id(user)
     schedule_date = datetime.fromisoformat(schedule_data.date)
     deadline = schedule_date - timedelta(days=1)
     
     schedules_to_create = []
     
-    # Create main schedule
     main_schedule = Schedule(
+        entity_id=entity_id,
         **schedule_data.model_dump(),
         confirmation_deadline=deadline.isoformat(),
         created_by=user.user_id
     )
     
-    # If recurring, create future instances
     if schedule_data.repeat_type != "none" and schedule_data.repeat_until:
         repeat_until = datetime.fromisoformat(schedule_data.repeat_until)
         current_date = schedule_date
@@ -555,6 +749,7 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
             if should_create:
                 instance_deadline = current_date - timedelta(days=1)
                 instance = Schedule(
+                    entity_id=entity_id,
                     title=schedule_data.title,
                     description=schedule_data.description,
                     schedule_type=schedule_data.schedule_type,
@@ -573,24 +768,20 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
                 doc["created_at"] = doc["created_at"].isoformat()
                 schedules_to_create.append(doc)
             
-            # Advance date
             if schedule_data.repeat_type == "daily":
                 current_date += timedelta(days=1)
             elif schedule_data.repeat_type == "weekly":
                 current_date += timedelta(days=1)
             elif schedule_data.repeat_type == "monthly":
-                # Move to next month
                 if current_date.month == 12:
                     current_date = current_date.replace(year=current_date.year + 1, month=1)
                 else:
                     current_date = current_date.replace(month=current_date.month + 1)
     else:
-        # Single schedule
         doc = main_schedule.model_dump()
         doc["created_at"] = doc["created_at"].isoformat()
         schedules_to_create.append(doc)
     
-    # Insert all schedules
     if schedules_to_create:
         await db.schedules.insert_many(schedules_to_create)
     
@@ -599,9 +790,9 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
 
 @api_router.put("/schedules/{schedule_id}")
 async def update_schedule(schedule_id: str, schedule_data: ScheduleCreate, user: User = Depends(get_current_user)):
-    """Update a schedule"""
+    entity_id = await get_current_entity_id(user)
     result = await db.schedules.update_one(
-        {"schedule_id": schedule_id},
+        {"schedule_id": schedule_id, "entity_id": entity_id},
         {"$set": schedule_data.model_dump()}
     )
     if result.matched_count == 0:
@@ -610,18 +801,19 @@ async def update_schedule(schedule_id: str, schedule_data: ScheduleCreate, user:
 
 @api_router.delete("/schedules/{schedule_id}")
 async def delete_schedule(schedule_id: str, user: User = Depends(get_current_user)):
-    """Delete a schedule"""
-    result = await db.schedules.delete_one({"schedule_id": schedule_id})
+    entity_id = await get_current_entity_id(user)
+    result = await db.schedules.delete_one({"schedule_id": schedule_id, "entity_id": entity_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Schedule not found")
     return {"message": "Schedule deleted"}
 
-# ============== ATTENDANCE ROUTES ==============
-
 @api_router.post("/schedules/{schedule_id}/attendance")
 async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmation, user: User = Depends(get_current_user)):
-    """Confirm or decline attendance"""
-    schedule = await db.schedules.find_one({"schedule_id": schedule_id}, {"_id": 0})
+    entity_id = await get_current_entity_id(user)
+    schedule = await db.schedules.find_one(
+        {"schedule_id": schedule_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
     
@@ -636,20 +828,21 @@ async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmat
             }
         )
         
-        # Award badge and points
-        await award_badge(user.user_id, "schedule_confirmed")
-        await add_points(user.user_id, 10)
+        await award_badge(user.user_id, "schedule_confirmed", entity_id)
+        await add_points(user.user_id, 10, entity_id)
         
-        # Check for milestone badges
-        member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
-        confirm_count = await db.schedules.count_documents({"confirmed_members": member.get("member_id")})
+        member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+        confirm_count = await db.schedules.count_documents({
+            "confirmed_members": member.get("member_id"),
+            "entity_id": entity_id
+        })
         
         if confirm_count >= 5:
-            await award_badge(user.user_id, "schedule_5")
+            await award_badge(user.user_id, "schedule_5", entity_id)
         if confirm_count >= 10:
-            await award_badge(user.user_id, "schedule_10")
+            await award_badge(user.user_id, "schedule_10", entity_id)
         if confirm_count >= 25:
-            await award_badge(user.user_id, "schedule_25")
+            await award_badge(user.user_id, "schedule_25", entity_id)
             
     elif confirmation.status == "declined":
         update = {
@@ -658,10 +851,9 @@ async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmat
         }
         if confirmation.substitute_id:
             update["$set"] = {f"substitutes.{member_id}": confirmation.substitute_id}
-            # Award helper badge to substitute
             sub_member = await db.members.find_one({"member_id": confirmation.substitute_id}, {"_id": 0})
             if sub_member and sub_member.get("user_id"):
-                await award_badge(sub_member["user_id"], "helper")
+                await award_badge(sub_member["user_id"], "helper", entity_id)
         
         await db.schedules.update_one({"schedule_id": schedule_id}, update)
     
@@ -669,14 +861,14 @@ async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmat
 
 @api_router.get("/my-schedules")
 async def get_my_schedules(user: User = Depends(get_current_user)):
-    """Get schedules for current user"""
-    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    entity_id = await get_current_entity_id(user)
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
     if not member:
         return []
     
     member_id = member["member_id"]
     schedules = await db.schedules.find(
-        {"assigned_members": member_id},
+        {"assigned_members": member_id, "entity_id": entity_id},
         {"_id": 0}
     ).sort("date", 1).to_list(100)
     
@@ -684,10 +876,10 @@ async def get_my_schedules(user: User = Depends(get_current_user)):
 
 # ============== CONTENT APPROVAL ROUTES ==============
 
-@api_router.get("/approvals", response_model=List[dict])
+@api_router.get("/approvals")
 async def get_approvals(status: Optional[str] = None, user: User = Depends(get_current_user)):
-    """Get content approvals"""
-    query = {}
+    entity_id = await get_current_entity_id(user)
+    query = {"entity_id": entity_id}
     if status:
         query["status"] = status
     approvals = await db.content_approvals.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
@@ -695,8 +887,9 @@ async def get_approvals(status: Optional[str] = None, user: User = Depends(get_c
 
 @api_router.post("/approvals")
 async def create_approval(approval_data: ContentApprovalCreate, user: User = Depends(get_current_user)):
-    """Submit content for approval"""
+    entity_id = await get_current_entity_id(user)
     approval = ContentApproval(
+        entity_id=entity_id,
         **approval_data.model_dump(),
         submitted_by=user.user_id
     )
@@ -704,32 +897,31 @@ async def create_approval(approval_data: ContentApprovalCreate, user: User = Dep
     doc["created_at"] = doc["created_at"].isoformat()
     await db.content_approvals.insert_one(doc)
     
-    # Award badge
-    await award_badge(user.user_id, "content_creator")
-    await add_points(user.user_id, 15)
+    await award_badge(user.user_id, "content_creator", entity_id)
+    await add_points(user.user_id, 15, entity_id)
     
-    result = await db.content_approvals.find_one({"approval_id": doc["approval_id"]}, {"_id": 0})
-    return result
+    return await db.content_approvals.find_one({"approval_id": doc["approval_id"]}, {"_id": 0})
 
 @api_router.post("/approvals/{approval_id}/vote")
 async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(get_current_user)):
-    """Vote on content approval"""
-    approval = await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
+    entity_id = await get_current_entity_id(user)
+    approval = await db.content_approvals.find_one(
+        {"approval_id": approval_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
     if not approval:
         raise HTTPException(status_code=404, detail="Approval not found")
     
     if approval["status"] != "pending":
         raise HTTPException(status_code=400, detail="Voting is closed")
     
-    # Check if user can vote
-    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
     if not member:
         raise HTTPException(status_code=403, detail="Member not found")
     
     if not member.get("can_vote", False):
         raise HTTPException(status_code=403, detail="Você não tem permissão para votar")
     
-    # Check if first vote
     is_first_vote = "first_vote" not in member.get("badges", [])
     
     await db.content_approvals.update_one(
@@ -753,46 +945,42 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
             {"$addToSet": {"votes_against": user.user_id}}
         )
     
-    # Award badge and points
     if is_first_vote:
-        await award_badge(user.user_id, "first_vote")
-    await add_points(user.user_id, 5)
+        await award_badge(user.user_id, "first_vote", entity_id)
+    await add_points(user.user_id, 5, entity_id)
     
-    # Check voter milestone
     total_votes = await db.content_approvals.count_documents({
         "$or": [
             {"votes_for": user.user_id},
             {"votes_against": user.user_id}
-        ]
+        ],
+        "entity_id": entity_id
     })
     if total_votes >= 10:
-        await award_badge(user.user_id, "voter_10")
+        await award_badge(user.user_id, "voter_10", entity_id)
     
-    # Check if approval threshold reached (50% of voters who CAN vote)
     updated = await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
-    total_voters = await db.members.count_documents({"active": True, "can_vote": True})
+    total_voters = await db.members.count_documents({"active": True, "can_vote": True, "entity_id": entity_id})
     total_votes_count = len(updated["votes_for"]) + len(updated["votes_against"])
     
     if total_votes_count > 0 and total_voters > 0:
         approval_percentage = len(updated["votes_for"]) / total_votes_count * 100
-        # Require at least half of eligible voters to have voted
         if approval_percentage > 50 and total_votes_count >= max(1, total_voters // 2):
             await db.content_approvals.update_one(
                 {"approval_id": approval_id},
                 {"$set": {"status": "approved"}}
             )
-            # Award content creator
             creator_user_id = updated["submitted_by"]
-            await award_badge(creator_user_id, "content_approved")
-            await add_points(creator_user_id, 50)
+            await award_badge(creator_user_id, "content_approved", entity_id)
+            await add_points(creator_user_id, 50, entity_id)
             
-            # Check milestone
             approved_count = await db.content_approvals.count_documents({
                 "submitted_by": creator_user_id,
-                "status": "approved"
+                "status": "approved",
+                "entity_id": entity_id
             })
             if approved_count >= 5:
-                await award_badge(creator_user_id, "content_5_approved")
+                await award_badge(creator_user_id, "content_5_approved", entity_id)
                 
         elif approval_percentage < 50 and total_votes_count >= max(1, total_voters // 2):
             await db.content_approvals.update_one(
@@ -802,29 +990,96 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
     
     return await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
 
-# Endpoint para obter estatísticas de votação
 @api_router.get("/approvals/voting-stats")
 async def get_voting_stats(user: User = Depends(get_current_user)):
-    """Get voting statistics"""
-    total_voters = await db.members.count_documents({"active": True, "can_vote": True})
+    entity_id = await get_current_entity_id(user)
+    total_voters = await db.members.count_documents({"active": True, "can_vote": True, "entity_id": entity_id})
     
-    # Check if current user can vote
-    member = await db.members.find_one({"user_id": user.user_id}, {"_id": 0})
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
     can_vote = member.get("can_vote", False) if member else False
+    is_admin = member.get("is_admin", False) if member else False
     
     return {
         "total_voters": total_voters,
-        "can_vote": can_vote
+        "can_vote": can_vote,
+        "is_admin": is_admin
     }
+
+# Admin: Estornar voto de um membro
+@api_router.post("/admin/approvals/{approval_id}/revoke-vote")
+async def revoke_vote(approval_id: str, request: Request, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
     
-    return await db.content_approvals.find_one({"approval_id": approval_id}, {"_id": 0})
+    data = await request.json()
+    member_user_id = data.get("user_id")
+    
+    if not member_user_id:
+        raise HTTPException(status_code=400, detail="user_id é obrigatório")
+    
+    approval = await db.content_approvals.find_one(
+        {"approval_id": approval_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not approval:
+        raise HTTPException(status_code=404, detail="Aprovação não encontrada")
+    
+    # Remover voto do usuário
+    await db.content_approvals.update_one(
+        {"approval_id": approval_id},
+        {
+            "$pull": {
+                "votes_for": member_user_id,
+                "votes_against": member_user_id
+            }
+        }
+    )
+    
+    return {"message": "Voto estornado com sucesso"}
+
+# Admin: Reiniciar votação
+@api_router.post("/admin/approvals/{approval_id}/reset-votes")
+async def reset_votes(approval_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    result = await db.content_approvals.update_one(
+        {"approval_id": approval_id, "entity_id": entity_id},
+        {
+            "$set": {
+                "votes_for": [],
+                "votes_against": [],
+                "status": "pending"
+            }
+        }
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Aprovação não encontrada")
+    
+    return {"message": "Votação reiniciada com sucesso"}
+
+# Admin: Excluir aprovação
+@api_router.delete("/admin/approvals/{approval_id}")
+async def delete_approval(approval_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    result = await db.content_approvals.delete_one(
+        {"approval_id": approval_id, "entity_id": entity_id}
+    )
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Aprovação não encontrada")
+    
+    return {"message": "Aprovação excluída com sucesso"}
 
 # ============== LINKS ROUTES ==============
 
-@api_router.get("/links", response_model=List[dict])
+@api_router.get("/links")
 async def get_links(category: Optional[str] = None, user: User = Depends(get_current_user)):
-    """Get links and resources"""
-    query = {}
+    entity_id = await get_current_entity_id(user)
+    query = {"entity_id": entity_id}
     if category:
         query["category"] = category
     links = await db.links.find(query, {"_id": 0}).to_list(1000)
@@ -832,24 +1087,22 @@ async def get_links(category: Optional[str] = None, user: User = Depends(get_cur
 
 @api_router.post("/links")
 async def create_link(link_data: LinkCreate, user: User = Depends(get_current_user)):
-    """Create a new link"""
-    link = Link(**link_data.model_dump(), created_by=user.user_id)
+    entity_id = await get_current_entity_id(user)
+    link = Link(entity_id=entity_id, **link_data.model_dump(), created_by=user.user_id)
     doc = link.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.links.insert_one(doc)
     
-    # Award badge
-    await award_badge(user.user_id, "link_contributor")
-    await add_points(user.user_id, 10)
+    await award_badge(user.user_id, "link_contributor", entity_id)
+    await add_points(user.user_id, 10, entity_id)
     
-    result = await db.links.find_one({"link_id": doc["link_id"]}, {"_id": 0})
-    return result
+    return await db.links.find_one({"link_id": doc["link_id"]}, {"_id": 0})
 
 @api_router.put("/links/{link_id}")
 async def update_link(link_id: str, link_data: LinkCreate, user: User = Depends(get_current_user)):
-    """Update a link"""
+    entity_id = await get_current_entity_id(user)
     result = await db.links.update_one(
-        {"link_id": link_id},
+        {"link_id": link_id, "entity_id": entity_id},
         {"$set": link_data.model_dump()}
     )
     if result.matched_count == 0:
@@ -858,29 +1111,66 @@ async def update_link(link_id: str, link_data: LinkCreate, user: User = Depends(
 
 @api_router.delete("/links/{link_id}")
 async def delete_link(link_id: str, user: User = Depends(get_current_user)):
-    """Delete a link"""
-    result = await db.links.delete_one({"link_id": link_id})
+    entity_id = await get_current_entity_id(user)
+    result = await db.links.delete_one({"link_id": link_id, "entity_id": entity_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Link not found")
     return {"message": "Link deleted"}
+
+# ============== GAMIFICATION ROUTES ==============
+
+@api_router.get("/gamification/leaderboard")
+async def get_leaderboard(user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    members = await db.members.find(
+        {"active": True, "entity_id": entity_id},
+        {"_id": 0, "member_id": 1, "name": 1, "picture": 1, "points": 1, "level": 1, "badges": 1}
+    ).sort("points", -1).limit(20).to_list(20)
+    return members
+
+@api_router.get("/gamification/badges")
+async def get_all_badges(user: User = Depends(get_current_user)):
+    return BADGES
+
+@api_router.get("/gamification/my-stats")
+async def get_my_stats(user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        return {"points": 0, "level": 1, "badges": [], "rank": 0}
+    
+    higher_count = await db.members.count_documents({
+        "active": True,
+        "entity_id": entity_id,
+        "points": {"$gt": member.get("points", 0)}
+    })
+    
+    return {
+        "points": member.get("points", 0),
+        "level": member.get("level", 1),
+        "badges": member.get("badges", []),
+        "rank": higher_count + 1,
+        "badges_info": {b: BADGES[b] for b in member.get("badges", []) if b in BADGES}
+    }
 
 # ============== DASHBOARD ROUTES ==============
 
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats(user: User = Depends(get_current_user)):
-    """Get dashboard statistics"""
-    total_members = await db.members.count_documents({"active": True})
+    entity_id = await get_current_entity_id(user)
+    total_members = await db.members.count_documents({"active": True, "entity_id": entity_id})
     
     today = datetime.now(timezone.utc).date().isoformat()
     week_later = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
     active_schedules = await db.schedules.count_documents({
-        "date": {"$gte": today, "$lte": week_later}
+        "date": {"$gte": today, "$lte": week_later},
+        "entity_id": entity_id
     })
     
-    pending_approvals = await db.content_approvals.count_documents({"status": "pending"})
+    pending_approvals = await db.content_approvals.count_documents({"status": "pending", "entity_id": entity_id})
     
     upcoming_schedules = await db.schedules.find(
-        {"date": {"$gte": today}},
+        {"date": {"$gte": today}, "entity_id": entity_id},
         {"confirmed_members": 1, "_id": 0}
     ).to_list(100)
     confirmed_attendance = sum(len(s.get("confirmed_members", [])) for s in upcoming_schedules)
@@ -890,10 +1180,12 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
     last_month_start = last_month.replace(day=1).isoformat()
     
     this_month_members = await db.members.count_documents({
-        "created_at": {"$gte": this_month_start}
+        "created_at": {"$gte": this_month_start},
+        "entity_id": entity_id
     })
     last_month_members = await db.members.count_documents({
-        "created_at": {"$gte": last_month_start, "$lt": this_month_start}
+        "created_at": {"$gte": last_month_start, "$lt": this_month_start},
+        "entity_id": entity_id
     })
     
     growth = 0.0
@@ -910,19 +1202,19 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
 
 @api_router.get("/dashboard/upcoming")
 async def get_upcoming_events(user: User = Depends(get_current_user)):
-    """Get upcoming schedules for dashboard"""
+    entity_id = await get_current_entity_id(user)
     today = datetime.now(timezone.utc).date().isoformat()
     schedules = await db.schedules.find(
-        {"date": {"$gte": today}},
+        {"date": {"$gte": today}, "entity_id": entity_id},
         {"_id": 0}
     ).sort("date", 1).limit(5).to_list(5)
     return schedules
 
 @api_router.get("/dashboard/pending-approvals")
 async def get_pending_approvals_dashboard(user: User = Depends(get_current_user)):
-    """Get pending approvals for dashboard"""
+    entity_id = await get_current_entity_id(user)
     approvals = await db.content_approvals.find(
-        {"status": "pending"},
+        {"status": "pending", "entity_id": entity_id},
         {"_id": 0}
     ).sort("created_at", -1).limit(5).to_list(5)
     return approvals
@@ -931,7 +1223,7 @@ async def get_pending_approvals_dashboard(user: User = Depends(get_current_user)
 
 @api_router.post("/ai/suggest")
 async def get_ai_suggestion(request: Request, user: User = Depends(get_current_user)):
-    """Get AI-powered content suggestions"""
+    entity_id = await get_current_entity_id(user)
     data = await request.json()
     prompt = data.get("prompt", "")
     
@@ -944,7 +1236,7 @@ async def get_ai_suggestion(request: Request, user: User = Depends(get_current_u
         
         chat = LlmChat(
             api_key=api_key,
-            session_id=f"rhema_{user.user_id}_{uuid.uuid4().hex[:8]}",
+            session_id=f"tomich_{user.user_id}_{uuid.uuid4().hex[:8]}",
             system_message="Você é um assistente criativo para uma equipe de mídia de igreja (Tomich Gestão de Mídia). Ajude com ideias de conteúdo, roteiros, legendas para redes sociais e estratégias de mídia. Seja criativo, relevante e alinhado com valores cristãos."
         )
         chat.with_model("openai", "gpt-5.2")
@@ -952,9 +1244,8 @@ async def get_ai_suggestion(request: Request, user: User = Depends(get_current_u
         user_message = UserMessage(text=prompt)
         response = await chat.send_message(user_message)
         
-        # Award badge for using AI
-        await award_badge(user.user_id, "ai_explorer")
-        await add_points(user.user_id, 5)
+        await award_badge(user.user_id, "ai_explorer", entity_id)
+        await add_points(user.user_id, 5, entity_id)
         
         return {"suggestion": response}
     except ImportError:
@@ -967,7 +1258,7 @@ async def get_ai_suggestion(request: Request, user: User = Depends(get_current_u
 
 @api_router.get("/")
 async def root():
-    return {"message": "Tomich Gestão de Mídia API", "version": "1.0.0"}
+    return {"message": "Tomich Gestão de Mídia API", "version": "2.0.0"}
 
 # Include the router in the main app
 app.include_router(api_router)
