@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Plus,
   ThumbsUp,
@@ -21,7 +22,10 @@ import {
   Video,
   FileText,
   Instagram,
-  Sparkles
+  Sparkles,
+  Users,
+  Vote,
+  AlertCircle
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -51,7 +55,7 @@ const statusLabels = {
   rejected: { label: "Rejeitado", variant: "destructive", icon: XCircle }
 };
 
-const ApprovalCard = ({ approval, onVote, currentUserId, totalMembers }) => {
+const ApprovalCard = ({ approval, onVote, currentUserId, totalVoters, canVote }) => {
   const ContentIcon = contentTypeIcons[approval.content_type] || FileText;
   const statusInfo = statusLabels[approval.status] || statusLabels.pending;
   const StatusIcon = statusInfo.icon;
@@ -60,10 +64,10 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalMembers }) => {
   const votesAgainst = approval.votes_against?.length || 0;
   const totalVotes = votesFor + votesAgainst;
   const approvalPercentage = totalVotes > 0 ? (votesFor / totalVotes) * 100 : 0;
+  const participationPercentage = totalVoters > 0 ? (totalVotes / totalVoters) * 100 : 0;
 
   const hasVotedFor = approval.votes_for?.includes(currentUserId);
   const hasVotedAgainst = approval.votes_against?.includes(currentUserId);
-  const hasVoted = hasVotedFor || hasVotedAgainst;
 
   return (
     <Card className="card-hover overflow-hidden" data-testid={`approval-card-${approval.approval_id}`}>
@@ -89,7 +93,7 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalMembers }) => {
           </div>
         </div>
       ) : (
-        <div className="aspect-video bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+        <div className="aspect-video bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center relative">
           <ContentIcon className="w-16 h-16 text-muted-foreground/50" />
           <div className="absolute top-2 left-2">
             <Badge className="flex items-center gap-1">
@@ -112,58 +116,85 @@ const ApprovalCard = ({ approval, onVote, currentUserId, totalMembers }) => {
           {approval.description}
         </p>
 
-        {/* Voting Progress */}
+        {/* Voting Stats */}
         <div className="space-y-3 mb-4">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Aprovação</span>
-            <span className={`font-semibold ${approvalPercentage >= 50 ? "text-green-600" : "text-amber-500"}`}>
-              {Math.round(approvalPercentage)}%
+          {/* Approval Progress */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Aprovação</span>
+              <span className={`font-semibold ${approvalPercentage >= 50 ? "text-green-600" : "text-amber-500"}`}>
+                {Math.round(approvalPercentage)}%
+              </span>
+            </div>
+            <div className="relative">
+              <Progress
+                value={approvalPercentage}
+                className={`h-3 ${approvalPercentage >= 50 ? "[&>div]:bg-green-500" : "[&>div]:bg-amber-500"}`}
+              />
+              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-0.5 h-3 bg-border" />
+            </div>
+          </div>
+
+          {/* Participation */}
+          <div className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded-lg">
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Users className="w-4 h-4" />
+              Participação
+            </span>
+            <span className="font-medium">
+              {totalVotes} de {totalVoters} votantes ({Math.round(participationPercentage)}%)
             </span>
           </div>
-          <div className="relative">
-            <Progress
-              value={approvalPercentage}
-              className={`h-3 ${approvalPercentage >= 50 ? "[&>div]:bg-green-500" : "[&>div]:bg-amber-500"}`}
-            />
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-0.5 h-3 bg-border" />
-          </div>
+
+          {/* Votes breakdown */}
           <div className="flex justify-between text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <ThumbsUp className="w-3 h-3 text-green-500" />
-              {votesFor} votos
+              {votesFor} votos a favor
             </span>
             <span>50% necessário</span>
             <span className="flex items-center gap-1">
               <ThumbsDown className="w-3 h-3 text-red-500" />
-              {votesAgainst} votos
+              {votesAgainst} votos contra
             </span>
           </div>
         </div>
 
         {/* Vote Buttons */}
         {approval.status === "pending" && (
-          <div className="flex gap-2">
-            <Button
-              variant={hasVotedFor ? "default" : "outline"}
-              className={`flex-1 ${hasVotedFor ? "bg-green-600 hover:bg-green-700" : ""}`}
-              onClick={() => onVote(approval.approval_id, "for")}
-              disabled={hasVotedFor}
-              data-testid={`vote-for-${approval.approval_id}`}
-            >
-              <ThumbsUp className="w-4 h-4 mr-2" />
-              Aprovar
-            </Button>
-            <Button
-              variant={hasVotedAgainst ? "default" : "outline"}
-              className={`flex-1 ${hasVotedAgainst ? "bg-red-600 hover:bg-red-700" : ""}`}
-              onClick={() => onVote(approval.approval_id, "against")}
-              disabled={hasVotedAgainst}
-              data-testid={`vote-against-${approval.approval_id}`}
-            >
-              <ThumbsDown className="w-4 h-4 mr-2" />
-              Rejeitar
-            </Button>
-          </div>
+          <>
+            {canVote ? (
+              <div className="flex gap-2">
+                <Button
+                  variant={hasVotedFor ? "default" : "outline"}
+                  className={`flex-1 ${hasVotedFor ? "bg-green-600 hover:bg-green-700" : ""}`}
+                  onClick={() => onVote(approval.approval_id, "for")}
+                  disabled={hasVotedFor}
+                  data-testid={`vote-for-${approval.approval_id}`}
+                >
+                  <ThumbsUp className="w-4 h-4 mr-2" />
+                  Aprovar
+                </Button>
+                <Button
+                  variant={hasVotedAgainst ? "default" : "outline"}
+                  className={`flex-1 ${hasVotedAgainst ? "bg-red-600 hover:bg-red-700" : ""}`}
+                  onClick={() => onVote(approval.approval_id, "against")}
+                  disabled={hasVotedAgainst}
+                  data-testid={`vote-against-${approval.approval_id}`}
+                >
+                  <ThumbsDown className="w-4 h-4 mr-2" />
+                  Rejeitar
+                </Button>
+              </div>
+            ) : (
+              <Alert className="bg-amber-50 border-amber-200">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-700 text-sm">
+                  Você não tem permissão para votar. Contate um administrador.
+                </AlertDescription>
+              </Alert>
+            )}
+          </>
         )}
 
         {/* Metadata */}
@@ -185,7 +216,7 @@ export default function ApprovalsPage() {
   const [activeTab, setActiveTab] = useState("pending");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [totalMembers, setTotalMembers] = useState(0);
+  const [votingStats, setVotingStats] = useState({ total_voters: 0, can_vote: false });
 
   const [formData, setFormData] = useState({
     title: "",
@@ -201,15 +232,15 @@ export default function ApprovalsPage() {
 
   const fetchData = async () => {
     try {
-      const [approvalsRes, userRes, membersRes] = await Promise.all([
+      const [approvalsRes, userRes, statsRes] = await Promise.all([
         axios.get(`${API}/approvals`, { withCredentials: true }),
         axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/members`, { withCredentials: true })
+        axios.get(`${API}/approvals/voting-stats`, { withCredentials: true })
       ]);
 
       setApprovals(approvalsRes.data);
       setCurrentUser(userRes.data);
-      setTotalMembers(membersRes.data.length);
+      setVotingStats(statsRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
@@ -248,7 +279,11 @@ export default function ApprovalsPage() {
       fetchData();
     } catch (error) {
       console.error("Error voting:", error);
-      toast.error("Erro ao votar");
+      if (error.response?.status === 403) {
+        toast.error("Você não tem permissão para votar");
+      } else {
+        toast.error("Erro ao votar");
+      }
     }
   };
 
@@ -280,83 +315,111 @@ export default function ApprovalsPage() {
             Vote nos conteúdos para aprovação
           </p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="submit-content-btn">
-              <Plus className="w-4 h-4 mr-2" />
-              Enviar Conteúdo
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="font-outfit">Enviar para Aprovação</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Título</Label>
-                <Input
-                  placeholder="Ex: Vídeo do culto de domingo"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  data-testid="approval-title-input"
-                />
+        <div className="flex items-center gap-4">
+          {/* Voting Stats Card */}
+          <Card className="border-green-200 bg-green-50">
+            <CardContent className="py-3 px-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <Vote className="w-5 h-5 text-green-600" />
               </div>
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Textarea
-                  placeholder="Descreva o conteúdo..."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  data-testid="approval-description-input"
-                />
+              <div>
+                <p className="text-sm font-medium text-green-700">Votantes</p>
+                <p className="text-xl font-bold text-green-600">{votingStats.total_voters}</p>
               </div>
-              <div className="space-y-2">
-                <Label>Tipo de Conteúdo</Label>
-                <Select
-                  value={formData.content_type}
-                  onValueChange={(value) => setFormData({ ...formData, content_type: value })}
-                >
-                  <SelectTrigger data-testid="approval-type-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="video">Vídeo</SelectItem>
-                    <SelectItem value="image">Imagem</SelectItem>
-                    <SelectItem value="post">Post</SelectItem>
-                    <SelectItem value="story">Story</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>URL do Conteúdo</Label>
-                <Input
-                  placeholder="https://..."
-                  value={formData.content_url}
-                  onChange={(e) => setFormData({ ...formData, content_url: e.target.value })}
-                  data-testid="approval-content-url-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>URL da Thumbnail</Label>
-                <Input
-                  placeholder="https://..."
-                  value={formData.thumbnail_url}
-                  onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })}
-                  data-testid="approval-thumbnail-input"
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancelar</Button>
-              </DialogClose>
-              <Button onClick={handleCreateApproval} data-testid="submit-approval-btn">
-                Enviar para Aprovação
+              {votingStats.can_vote && (
+                <Badge className="bg-green-600 ml-2">Você pode votar</Badge>
+              )}
+            </CardContent>
+          </Card>
+
+          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <DialogTrigger asChild>
+              <Button data-testid="submit-content-btn">
+                <Plus className="w-4 h-4 mr-2" />
+                Enviar Conteúdo
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle className="font-outfit">Enviar para Aprovação</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Título</Label>
+                  <Input
+                    placeholder="Ex: Vídeo do culto de domingo"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    data-testid="approval-title-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Descrição</Label>
+                  <Textarea
+                    placeholder="Descreva o conteúdo..."
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    data-testid="approval-description-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Tipo de Conteúdo</Label>
+                  <Select
+                    value={formData.content_type}
+                    onValueChange={(value) => setFormData({ ...formData, content_type: value })}
+                  >
+                    <SelectTrigger data-testid="approval-type-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="video">Vídeo</SelectItem>
+                      <SelectItem value="image">Imagem</SelectItem>
+                      <SelectItem value="post">Post</SelectItem>
+                      <SelectItem value="story">Story</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>URL do Conteúdo</Label>
+                  <Input
+                    placeholder="https://..."
+                    value={formData.content_url}
+                    onChange={(e) => setFormData({ ...formData, content_url: e.target.value })}
+                    data-testid="approval-content-url-input"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>URL da Thumbnail</Label>
+                  <Input
+                    placeholder="https://..."
+                    value={formData.thumbnail_url}
+                    onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })}
+                    data-testid="approval-thumbnail-input"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button onClick={handleCreateApproval} data-testid="submit-approval-btn">
+                  Enviar para Aprovação
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {/* Info Alert */}
+      {!votingStats.can_vote && (
+        <Alert className="bg-amber-50 border-amber-200">
+          <AlertCircle className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-700">
+            Você não está habilitado para votar. Para votar nas aprovações, um administrador precisa ativar essa permissão no seu cadastro de membro.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -395,7 +458,8 @@ export default function ApprovalsPage() {
               approval={approval}
               onVote={handleVote}
               currentUserId={currentUser?.user_id}
-              totalMembers={totalMembers}
+              totalVoters={votingStats.total_voters}
+              canVote={votingStats.can_vote}
             />
           ))}
         </div>
