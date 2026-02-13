@@ -75,7 +75,7 @@ class Schedule(BaseModel):
     schedule_id: str = Field(default_factory=lambda: f"schedule_{uuid.uuid4().hex[:12]}")
     title: str
     description: Optional[str] = None
-    schedule_type: str
+    schedule_type: str  # class (aulas) or content (postagens)
     date: str
     start_time: str
     end_time: str
@@ -84,6 +84,11 @@ class Schedule(BaseModel):
     declined_members: List[str] = []
     substitutes: dict = {}
     confirmation_deadline: str
+    # Repeat fields
+    repeat_type: str = "none"  # none, daily, weekly, monthly
+    repeat_days: List[str] = []  # for weekly: ["monday", "wednesday", "friday"]
+    repeat_until: Optional[str] = None
+    parent_schedule_id: Optional[str] = None  # For recurring instances
     created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -95,6 +100,9 @@ class ScheduleCreate(BaseModel):
     start_time: str
     end_time: str
     assigned_members: List[str] = []
+    repeat_type: str = "none"
+    repeat_days: List[str] = []
+    repeat_until: Optional[str] = None
 
 class AttendanceConfirmation(BaseModel):
     schedule_id: str
