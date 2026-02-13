@@ -846,7 +846,7 @@ async def get_ai_suggestion(request: Request, user: User = Depends(get_current_u
         chat = LlmChat(
             api_key=api_key,
             session_id=f"rhema_{user.user_id}_{uuid.uuid4().hex[:8]}",
-            system_message="Você é um assistente criativo para uma equipe de mídia de igreja. Ajude com ideias de conteúdo, roteiros, legendas para redes sociais e estratégias de mídia. Seja criativo, relevante e alinhado com valores cristãos."
+            system_message="Você é um assistente criativo para uma equipe de mídia de igreja (Tomich Gestão de Mídia). Ajude com ideias de conteúdo, roteiros, legendas para redes sociais e estratégias de mídia. Seja criativo, relevante e alinhado com valores cristãos."
         )
         chat.with_model("openai", "gpt-5.2")
         
