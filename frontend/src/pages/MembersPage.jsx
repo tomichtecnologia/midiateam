@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
 import {
   Plus,
   Search,
@@ -21,7 +22,8 @@ import {
   Trash2,
   UserPlus,
   Vote,
-  CheckCircle
+  Shield,
+  Crown
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -58,12 +60,19 @@ const MemberCard = ({ member, onEdit, onDelete }) => {
     <Card className="card-hover group" data-testid={`member-card-${member.member_id}`}>
       <CardContent className="p-6">
         <div className="flex items-start gap-4">
-          <Avatar className="w-16 h-16 border-2 border-primary/20">
-            <AvatarImage src={member.picture} />
-            <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
-              {member.name?.charAt(0) || "?"}
-            </AvatarFallback>
-          </Avatar>
+          <div className="relative">
+            <Avatar className="w-16 h-16 border-2 border-primary/20">
+              <AvatarImage src={member.picture} />
+              <AvatarFallback className="bg-primary/10 text-primary text-xl font-semibold">
+                {member.name?.charAt(0) || "?"}
+              </AvatarFallback>
+            </Avatar>
+            {member.is_admin && (
+              <div className="absolute -top-1 -right-1 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                <Crown className="w-4 h-4 text-white" />
+              </div>
+            )}
+          </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between">
               <div>
@@ -76,6 +85,14 @@ const MemberCard = ({ member, onEdit, onDelete }) => {
                   <Badge variant="outline">
                     {departmentLabels[member.department] || member.department}
                   </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  {member.is_admin && (
+                    <Badge className="bg-amber-500 flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      Admin
+                    </Badge>
+                  )}
                   {member.can_vote && (
                     <Badge variant="default" className="bg-green-600 flex items-center gap-1">
                       <Vote className="w-3 h-3" />
@@ -138,6 +155,7 @@ export default function MembersPage() {
     picture: "",
     role: "operator",
     department: "production",
+    is_admin: false,
     can_vote: false
   });
 
@@ -198,6 +216,7 @@ export default function MembersPage() {
       picture: member.picture || "",
       role: member.role,
       department: member.department,
+      is_admin: member.is_admin || false,
       can_vote: member.can_vote || false
     });
     setIsCreateOpen(true);
@@ -211,6 +230,7 @@ export default function MembersPage() {
       picture: "",
       role: "operator",
       department: "production",
+      is_admin: false,
       can_vote: false
     });
   };
@@ -225,6 +245,7 @@ export default function MembersPage() {
   });
 
   const votersCount = members.filter(m => m.can_vote).length;
+  const adminsCount = members.filter(m => m.is_admin).length;
 
   if (loading) {
     return (
@@ -262,7 +283,7 @@ export default function MembersPage() {
               Novo Membro
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="font-outfit">
                 {editingMember ? "Editar Membro" : "Adicionar Membro"}
@@ -343,24 +364,51 @@ export default function MembersPage() {
                 </div>
               </div>
 
-              {/* Permissão de Votação */}
-              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
-                    <Vote className="w-5 h-5 text-green-600" />
+              <Separator />
+
+              {/* Permissões */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-sm text-muted-foreground">Permissões</h4>
+                
+                {/* Admin */}
+                <div className="flex items-center justify-between p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                      <Shield className="w-5 h-5 text-amber-600" />
+                    </div>
+                    <div>
+                      <Label className="font-medium">Administrador</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Pode gerenciar membros, entidades e estornar votos
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="font-medium">Pode Votar nas Aprovações</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Permitir que este membro vote na aprovação de conteúdo
-                    </p>
-                  </div>
+                  <Switch
+                    checked={formData.is_admin}
+                    onCheckedChange={(checked) => setFormData({ ...formData, is_admin: checked })}
+                    data-testid="member-is-admin-switch"
+                  />
                 </div>
-                <Switch
-                  checked={formData.can_vote}
-                  onCheckedChange={(checked) => setFormData({ ...formData, can_vote: checked })}
-                  data-testid="member-can-vote-switch"
-                />
+
+                {/* Votação */}
+                <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                      <Vote className="w-5 h-5 text-green-600" />
+                    </div>
+                    <div>
+                      <Label className="font-medium">Pode Votar</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Permitir votar na aprovação de conteúdo
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={formData.can_vote}
+                    onCheckedChange={(checked) => setFormData({ ...formData, can_vote: checked })}
+                    data-testid="member-can-vote-switch"
+                  />
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -427,16 +475,19 @@ export default function MembersPage() {
           <div className="flex flex-wrap gap-4 justify-center text-sm text-muted-foreground">
             <span>Total: <strong className="text-foreground">{members.length}</strong></span>
             <span>•</span>
-            <span>Produção: <strong className="text-foreground">{members.filter(m => m.department === "production").length}</strong></span>
-            <span>•</span>
-            <span>Conteúdo: <strong className="text-foreground">{members.filter(m => m.department === "content").length}</strong></span>
-            <span>•</span>
-            <span>Desenvolvimento: <strong className="text-foreground">{members.filter(m => m.department === "development").length}</strong></span>
+            <span className="flex items-center gap-1">
+              <Shield className="w-4 h-4 text-amber-500" />
+              Admins: <strong className="text-amber-600">{adminsCount}</strong>
+            </span>
             <span>•</span>
             <span className="flex items-center gap-1">
               <Vote className="w-4 h-4 text-green-600" />
-              Podem Votar: <strong className="text-green-600">{votersCount}</strong>
+              Votantes: <strong className="text-green-600">{votersCount}</strong>
             </span>
+            <span>•</span>
+            <span>Produção: <strong className="text-foreground">{members.filter(m => m.department === "production").length}</strong></span>
+            <span>•</span>
+            <span>Conteúdo: <strong className="text-foreground">{members.filter(m => m.department === "content").length}</strong></span>
           </div>
         </CardContent>
       </Card>
