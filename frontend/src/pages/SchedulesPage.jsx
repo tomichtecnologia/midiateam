@@ -12,20 +12,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus,
   Clock,
   Users,
   CheckCircle,
   XCircle,
-  AlertCircle,
   CalendarDays,
   Video,
-  GraduationCap
+  GraduationCap,
+  Repeat,
+  Instagram
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay } from "date-fns";
+import { format, parseISO, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -41,26 +43,48 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, currentUserMemberId 
   const hasConfirmed = schedule.confirmed_members?.includes(currentUserMemberId);
   const hasDeclined = schedule.declined_members?.includes(currentUserMemberId);
 
+  const getScheduleTypeLabel = (type) => {
+    switch(type) {
+      case "class": return "Aula";
+      case "content": return "Postagem";
+      default: return type;
+    }
+  };
+
+  const getScheduleTypeIcon = (type) => {
+    switch(type) {
+      case "class": return <GraduationCap className="w-5 h-5 text-primary" />;
+      case "content": return <Instagram className="w-5 h-5 text-pink-500" />;
+      default: return <CalendarDays className="w-5 h-5" />;
+    }
+  };
+
   return (
     <Card className="schedule-card card-hover" data-testid={`schedule-detail-${schedule.schedule_id}`}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between mb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              {schedule.schedule_type === "class" ? (
-                <GraduationCap className="w-5 h-5 text-primary" />
-              ) : (
-                <Video className="w-5 h-5 text-secondary" />
-              )}
+              {getScheduleTypeIcon(schedule.schedule_type)}
               <h3 className="font-semibold text-lg">{schedule.title}</h3>
             </div>
             <p className="text-muted-foreground">
               {format(parseISO(schedule.date), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
             </p>
           </div>
-          <Badge variant={schedule.schedule_type === "class" ? "default" : "secondary"}>
-            {schedule.schedule_type === "class" ? "Aula" : "Conteúdo"}
-          </Badge>
+          <div className="flex flex-col gap-1 items-end">
+            <Badge variant={schedule.schedule_type === "class" ? "default" : "secondary"}>
+              {getScheduleTypeLabel(schedule.schedule_type)}
+            </Badge>
+            {schedule.repeat_type && schedule.repeat_type !== "none" && (
+              <Badge variant="outline" className="flex items-center gap-1">
+                <Repeat className="w-3 h-3" />
+                {schedule.repeat_type === "weekly" ? "Semanal" : 
+                 schedule.repeat_type === "daily" ? "Diário" : 
+                 schedule.repeat_type === "monthly" ? "Mensal" : ""}
+              </Badge>
+            )}
+          </div>
         </div>
 
         {schedule.description && (
@@ -179,8 +203,22 @@ export default function SchedulesPage() {
     date: format(new Date(), "yyyy-MM-dd"),
     start_time: "19:00",
     end_time: "21:00",
-    assigned_members: []
+    assigned_members: [],
+    repeat_enabled: false,
+    repeat_type: "none", // none, daily, weekly, monthly
+    repeat_days: [], // for weekly: ["monday", "wednesday", "friday"]
+    repeat_until: ""
   });
+
+  const weekDays = [
+    { value: "monday", label: "Segunda" },
+    { value: "tuesday", label: "Terça" },
+    { value: "wednesday", label: "Quarta" },
+    { value: "thursday", label: "Quinta" },
+    { value: "friday", label: "Sexta" },
+    { value: "saturday", label: "Sábado" },
+    { value: "sunday", label: "Domingo" }
+  ];
 
   useEffect(() => {
     fetchData();
@@ -197,7 +235,6 @@ export default function SchedulesPage() {
       setSchedules(schedulesRes.data);
       setMembers(membersRes.data);
 
-      // Find current user's member record
       const userMember = membersRes.data.find(m => m.user_id === userRes.data.user_id);
       setCurrentUserMember(userMember);
     } catch (error) {
@@ -210,23 +247,44 @@ export default function SchedulesPage() {
 
   const handleCreateSchedule = async () => {
     try {
-      await axios.post(`${API}/schedules`, formData, { withCredentials: true });
+      const scheduleData = {
+        title: formData.title,
+        description: formData.description,
+        schedule_type: formData.schedule_type,
+        date: formData.date,
+        start_time: formData.start_time,
+        end_time: formData.end_time,
+        assigned_members: formData.assigned_members,
+        repeat_type: formData.repeat_enabled ? formData.repeat_type : "none",
+        repeat_days: formData.repeat_days,
+        repeat_until: formData.repeat_until
+      };
+
+      await axios.post(`${API}/schedules`, scheduleData, { withCredentials: true });
       toast.success("Escala criada com sucesso!");
       setIsCreateOpen(false);
-      setFormData({
-        title: "",
-        description: "",
-        schedule_type: "class",
-        date: format(new Date(), "yyyy-MM-dd"),
-        start_time: "19:00",
-        end_time: "21:00",
-        assigned_members: []
-      });
+      resetForm();
       fetchData();
     } catch (error) {
       console.error("Error creating schedule:", error);
       toast.error("Erro ao criar escala");
     }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      title: "",
+      description: "",
+      schedule_type: "class",
+      date: format(new Date(), "yyyy-MM-dd"),
+      start_time: "19:00",
+      end_time: "21:00",
+      assigned_members: [],
+      repeat_enabled: false,
+      repeat_type: "none",
+      repeat_days: [],
+      repeat_until: ""
+    });
   };
 
   const handleConfirmAttendance = async (scheduleId, memberId, status) => {
@@ -244,6 +302,20 @@ export default function SchedulesPage() {
     }
   };
 
+  const toggleRepeatDay = (day) => {
+    if (formData.repeat_days.includes(day)) {
+      setFormData({
+        ...formData,
+        repeat_days: formData.repeat_days.filter(d => d !== day)
+      });
+    } else {
+      setFormData({
+        ...formData,
+        repeat_days: [...formData.repeat_days, day]
+      });
+    }
+  };
+
   const filteredSchedules = schedules.filter((schedule) => {
     if (activeTab === "class") return schedule.schedule_type === "class";
     if (activeTab === "content") return schedule.schedule_type === "content";
@@ -254,7 +326,6 @@ export default function SchedulesPage() {
     isSameDay(parseISO(schedule.date), selectedDate)
   );
 
-  // Get dates with schedules for calendar highlighting
   const datesWithSchedules = schedules.map((s) => parseISO(s.date));
 
   if (loading) {
@@ -276,7 +347,7 @@ export default function SchedulesPage() {
         <div>
           <h1 className="font-outfit text-3xl font-bold text-foreground">Escalas</h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie as escalas de aulas e produção de conteúdo
+            Gerencie as escalas de aulas e postagens
           </p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -286,20 +357,48 @@ export default function SchedulesPage() {
               Nova Escala
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="font-outfit">Criar Nova Escala</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {/* Tipo de Escala */}
+              <div className="space-y-2">
+                <Label>Tipo de Escala</Label>
+                <Select
+                  value={formData.schedule_type}
+                  onValueChange={(value) => setFormData({ ...formData, schedule_type: value })}
+                >
+                  <SelectTrigger data-testid="schedule-type-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="class">
+                      <div className="flex items-center gap-2">
+                        <GraduationCap className="w-4 h-4" />
+                        Escala de Aulas
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="content">
+                      <div className="flex items-center gap-2">
+                        <Instagram className="w-4 h-4" />
+                        Escala de Postagens
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <Label>Título</Label>
                 <Input
-                  placeholder="Ex: Aula de Segunda"
+                  placeholder={formData.schedule_type === "class" ? "Ex: Aula de Segunda" : "Ex: Postagens de Segunda"}
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   data-testid="schedule-title-input"
                 />
               </div>
+
               <div className="space-y-2">
                 <Label>Descrição</Label>
                 <Textarea
@@ -309,22 +408,8 @@ export default function SchedulesPage() {
                   data-testid="schedule-description-input"
                 />
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
-                  <Select
-                    value={formData.schedule_type}
-                    onValueChange={(value) => setFormData({ ...formData, schedule_type: value })}
-                  >
-                    <SelectTrigger data-testid="schedule-type-select">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="class">Aula</SelectItem>
-                      <SelectItem value="content">Conteúdo</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div className="space-y-2">
                   <Label>Data</Label>
                   <Input
@@ -334,8 +419,6 @@ export default function SchedulesPage() {
                     data-testid="schedule-date-input"
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Início</Label>
                   <Input
@@ -345,6 +428,9 @@ export default function SchedulesPage() {
                     data-testid="schedule-start-input"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Término</Label>
                   <Input
@@ -355,6 +441,74 @@ export default function SchedulesPage() {
                   />
                 </div>
               </div>
+
+              {/* Repetição */}
+              <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="w-4 h-4 text-primary" />
+                    <Label className="font-medium">Repetir Escala</Label>
+                  </div>
+                  <Switch
+                    checked={formData.repeat_enabled}
+                    onCheckedChange={(checked) => setFormData({ ...formData, repeat_enabled: checked })}
+                    data-testid="repeat-switch"
+                  />
+                </div>
+
+                {formData.repeat_enabled && (
+                  <div className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label>Frequência</Label>
+                      <Select
+                        value={formData.repeat_type}
+                        onValueChange={(value) => setFormData({ ...formData, repeat_type: value })}
+                      >
+                        <SelectTrigger data-testid="repeat-type-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="daily">Diariamente</SelectItem>
+                          <SelectItem value="weekly">Semanalmente</SelectItem>
+                          <SelectItem value="monthly">Mensalmente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.repeat_type === "weekly" && (
+                      <div className="space-y-2">
+                        <Label>Dias da Semana</Label>
+                        <div className="flex flex-wrap gap-2">
+                          {weekDays.map((day) => (
+                            <Button
+                              key={day.value}
+                              type="button"
+                              variant={formData.repeat_days.includes(day.value) ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => toggleRepeatDay(day.value)}
+                              data-testid={`repeat-day-${day.value}`}
+                            >
+                              {day.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <Label>Repetir até</Label>
+                      <Input
+                        type="date"
+                        value={formData.repeat_until}
+                        onChange={(e) => setFormData({ ...formData, repeat_until: e.target.value })}
+                        data-testid="repeat-until-input"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Membros */}
               <div className="space-y-2">
                 <Label>Membros Escalados</Label>
                 <Select
@@ -386,7 +540,7 @@ export default function SchedulesPage() {
                       <Badge
                         key={memberId}
                         variant="secondary"
-                        className="cursor-pointer"
+                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
                         onClick={() => setFormData({
                           ...formData,
                           assigned_members: formData.assigned_members.filter(id => id !== memberId)
@@ -411,7 +565,7 @@ export default function SchedulesPage() {
         </Dialog>
       </div>
 
-      {/* Tabs */}
+      {/* Tabs - Separadas por tipo */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all" data-testid="tab-all">
@@ -420,11 +574,11 @@ export default function SchedulesPage() {
           </TabsTrigger>
           <TabsTrigger value="class" data-testid="tab-class">
             <GraduationCap className="w-4 h-4 mr-2" />
-            Aulas (Seg/Qua/Sex)
+            Escalas de Aulas
           </TabsTrigger>
           <TabsTrigger value="content" data-testid="tab-content">
-            <Video className="w-4 h-4 mr-2" />
-            Conteúdo (Diário)
+            <Instagram className="w-4 h-4 mr-2" />
+            Escalas de Postagens
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -453,6 +607,21 @@ export default function SchedulesPage() {
               }}
               className="rounded-md border"
             />
+
+            {/* Legend */}
+            <div className="mt-4 pt-4 border-t space-y-2">
+              <p className="text-sm font-medium text-muted-foreground">Legenda:</p>
+              <div className="flex flex-col gap-2 text-sm">
+                <div className="flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-primary" />
+                  <span>Escala de Aulas</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Instagram className="w-4 h-4 text-pink-500" />
+                  <span>Escala de Postagens</span>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
