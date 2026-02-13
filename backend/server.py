@@ -868,7 +868,7 @@ async def get_ai_suggestion(request: Request, user: User = Depends(get_current_u
 
 @api_router.get("/")
 async def root():
-    return {"message": "Rhema Media System API", "version": "1.0.0"}
+    return {"message": "Tomich Gestão de Mídia API", "version": "1.0.0"}
 
 # Include the router in the main app
 app.include_router(api_router)

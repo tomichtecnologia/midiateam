@@ -43,7 +43,7 @@ const SidebarContent = ({ user, pathname, onLogout, onClose }) => (
           <span className="text-white font-bold text-lg">R</span>
         </div>
         <div>
-          <h1 className="font-outfit font-bold text-lg text-white">Rhema Media</h1>
+          <h1 className="font-outfit font-bold text-lg text-white">Tomich Gestão de Mídia</h1>
           <p className="text-xs text-white/60">Sistema de Mídia</p>
         </div>
       </div>
@@ -164,7 +164,7 @@ export default function SidebarLayout({ children, user }) {
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
             <span className="text-white font-bold">R</span>
           </div>
-          <span className="font-outfit font-bold text-white">Rhema Media</span>
+          <span className="font-outfit font-bold text-white">Tomich Gestão de Mídia</span>
         </div>
       </header>
 

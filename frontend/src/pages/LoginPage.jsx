@@ -27,7 +27,7 @@ export default function LoginPage() {
               <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center">
                 <Play className="w-6 h-6" />
               </div>
-              <span className="font-outfit text-2xl font-bold">Rhema Media</span>
+              <span className="font-outfit text-2xl font-bold">Tomich Gestão de Mídia</span>
             </div>
             <h1 className="font-outfit text-4xl md:text-5xl font-bold leading-tight">
               Gerencie sua equipe
@@ -65,7 +65,7 @@ export default function LoginPage() {
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
                 <Play className="w-5 h-5 text-white" />
               </div>
-              <span className="font-outfit text-xl font-bold">Rhema Media</span>
+              <span className="font-outfit text-xl font-bold">Tomich Gestão de Mídia</span>
             </div>
 
             <div className="space-y-6">
@@ -105,7 +105,7 @@ export default function LoginPage() {
               </Button>
 
               <div className="text-center text-sm text-muted-foreground">
-                <p>Rhema Brasil de Vitória</p>
+                <p>Tomich Gestão de Mídia</p>
                 <p className="mt-1">Sistema de Gerenciamento de Mídia</p>
               </div>
             </div>
