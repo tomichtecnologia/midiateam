@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Plus,
   Search,
@@ -18,7 +19,9 @@ import {
   Mic,
   Edit2,
   Trash2,
-  UserPlus
+  UserPlus,
+  Vote,
+  CheckCircle
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -65,7 +68,7 @@ const MemberCard = ({ member, onEdit, onDelete }) => {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="font-semibold text-lg truncate">{member.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex flex-wrap items-center gap-2 mt-1">
                   <Badge variant="secondary" className="flex items-center gap-1">
                     <RoleIcon className="w-3 h-3" />
                     {roleLabels[member.role] || member.role}
@@ -73,6 +76,12 @@ const MemberCard = ({ member, onEdit, onDelete }) => {
                   <Badge variant="outline">
                     {departmentLabels[member.department] || member.department}
                   </Badge>
+                  {member.can_vote && (
+                    <Badge variant="default" className="bg-green-600 flex items-center gap-1">
+                      <Vote className="w-3 h-3" />
+                      Pode Votar
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -128,7 +137,8 @@ export default function MembersPage() {
     phone: "",
     picture: "",
     role: "operator",
-    department: "production"
+    department: "production",
+    can_vote: false
   });
 
   useEffect(() => {
@@ -187,7 +197,8 @@ export default function MembersPage() {
       phone: member.phone || "",
       picture: member.picture || "",
       role: member.role,
-      department: member.department
+      department: member.department,
+      can_vote: member.can_vote || false
     });
     setIsCreateOpen(true);
   };
@@ -199,7 +210,8 @@ export default function MembersPage() {
       phone: "",
       picture: "",
       role: "operator",
-      department: "production"
+      department: "production",
+      can_vote: false
     });
   };
 
@@ -211,6 +223,8 @@ export default function MembersPage() {
       filterDepartment === "all" || member.department === filterDepartment;
     return matchesSearch && matchesDepartment;
   });
+
+  const votersCount = members.filter(m => m.can_vote).length;
 
   if (loading) {
     return (
@@ -328,6 +342,26 @@ export default function MembersPage() {
                   </Select>
                 </div>
               </div>
+
+              {/* Permissão de Votação */}
+              <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                    <Vote className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <Label className="font-medium">Pode Votar nas Aprovações</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Permitir que este membro vote na aprovação de conteúdo
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={formData.can_vote}
+                  onCheckedChange={(checked) => setFormData({ ...formData, can_vote: checked })}
+                  data-testid="member-can-vote-switch"
+                />
+              </div>
             </div>
             <DialogFooter>
               <DialogClose asChild>
@@ -398,6 +432,11 @@ export default function MembersPage() {
             <span>Conteúdo: <strong className="text-foreground">{members.filter(m => m.department === "content").length}</strong></span>
             <span>•</span>
             <span>Desenvolvimento: <strong className="text-foreground">{members.filter(m => m.department === "development").length}</strong></span>
+            <span>•</span>
+            <span className="flex items-center gap-1">
+              <Vote className="w-4 h-4 text-green-600" />
+              Podem Votar: <strong className="text-green-600">{votersCount}</strong>
+            </span>
           </div>
         </CardContent>
       </Card>
