@@ -331,6 +331,104 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
           </Collapsible>
         )}
 
+        {/* Creator Response Section - Only for rejected content */}
+        {approval.status === "rejected" && isCreator && (
+          <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <h4 className="font-medium text-blue-800 text-sm mb-2 flex items-center gap-2">
+              <Reply className="w-4 h-4" />
+              Resposta às Correções
+            </h4>
+            
+            {approval.creator_response ? (
+              <div className="space-y-3">
+                <p className="text-sm text-blue-700 bg-white p-3 rounded border border-blue-100">
+                  {approval.creator_response}
+                </p>
+                <Button 
+                  onClick={() => onRequestReevaluation(approval.approval_id)}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  data-testid={`request-reevaluation-${approval.approval_id}`}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Solicitar Nova Avaliação
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-xs text-blue-600 mb-2">
+                  Explique as correções que você fez no conteúdo antes de solicitar nova avaliação:
+                </p>
+                <Textarea
+                  placeholder="Ex: Ajustei a iluminação conforme sugerido, melhorei a qualidade da imagem e corrigi o enquadramento..."
+                  value={responseText}
+                  onChange={(e) => setResponseText(e.target.value)}
+                  className="min-h-[80px] bg-white"
+                  data-testid={`creator-response-input-${approval.approval_id}`}
+                />
+                <Button 
+                  onClick={handleSaveResponse}
+                  disabled={!responseText.trim() || isResponding}
+                  className="w-full"
+                  data-testid={`save-response-${approval.approval_id}`}
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {isResponding ? "Salvando..." : "Salvar Resposta"}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Show creator response to other users (not creator) */}
+        {approval.status === "rejected" && !isCreator && approval.creator_response && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <h4 className="font-medium text-blue-800 text-xs mb-1 flex items-center gap-1">
+              <Reply className="w-3 h-3" />
+              Resposta do Criador:
+            </h4>
+            <p className="text-sm text-blue-700">{approval.creator_response}</p>
+          </div>
+        )}
+
+        {/* Revision History */}
+        {revisionHistory.length > 0 && (
+          <Collapsible open={showHistory} onOpenChange={setShowHistory} className="mb-4">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between p-2 h-auto bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg">
+                <span className="flex items-center gap-2 text-gray-700 text-sm font-medium">
+                  <History className="w-4 h-4" />
+                  {revisionHistory.length} revisão(ões) anterior(es)
+                </span>
+                <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${showHistory ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              {revisionHistory.map((rev, idx) => (
+                <div key={idx} className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium">Revisão {rev.revision_number}</span>
+                    <Badge variant={rev.status === "approved" ? "default" : "destructive"} className="text-xs">
+                      {rev.status === "approved" ? "Aprovado" : "Rejeitado"}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>Votos: {rev.votes_for?.length || 0} a favor, {rev.votes_against?.length || 0} contra</p>
+                    {rev.rejection_reasons?.length > 0 && (
+                      <p>Motivos de rejeição: {rev.rejection_reasons.length}</p>
+                    )}
+                    {rev.creator_response && (
+                      <p className="text-blue-600">Resposta: "{rev.creator_response.substring(0, 50)}..."</p>
+                    )}
+                    {rev.closed_at && (
+                      <p>Encerrado em: {format(parseISO(rev.closed_at), "dd/MM/yy 'às' HH:mm", { locale: ptBR })}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {/* Vote Buttons */}
         {approval.status === "pending" && (
           <>
