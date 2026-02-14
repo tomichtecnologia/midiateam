@@ -96,17 +96,52 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
               {format(parseISO(schedule.date), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
             </p>
           </div>
-          <div className="flex flex-col gap-1 items-end">
-            <Badge variant={schedule.schedule_type === "class" ? "default" : "secondary"}>
-              {getScheduleTypeLabel(schedule.schedule_type)}
-            </Badge>
-            {schedule.repeat_type && schedule.repeat_type !== "none" && (
-              <Badge variant="outline" className="flex items-center gap-1">
-                <Repeat className="w-3 h-3" />
-                {schedule.repeat_type === "weekly" ? "Semanal" : 
-                 schedule.repeat_type === "daily" ? "Diário" : 
-                 schedule.repeat_type === "monthly" ? "Mensal" : ""}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-col gap-1 items-end">
+              <Badge variant={schedule.schedule_type === "class" ? "default" : "secondary"}>
+                {getScheduleTypeLabel(schedule.schedule_type)}
               </Badge>
+              {isRecurring && (
+                <Badge variant="outline" className="flex items-center gap-1">
+                  <Repeat className="w-3 h-3" />
+                  {schedule.repeat_type === "weekly" ? "Semanal" : 
+                   schedule.repeat_type === "daily" ? "Diário" : 
+                   schedule.repeat_type === "monthly" ? "Mensal" : ""}
+                </Badge>
+              )}
+            </div>
+            {/* Admin Actions Menu */}
+            {isAdmin && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" data-testid={`schedule-menu-${schedule.schedule_id}`}>
+                    <MoreVertical className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem 
+                    className="text-destructive focus:text-destructive"
+                    onClick={() => onDelete(schedule.schedule_id, false)}
+                    data-testid={`delete-single-${schedule.schedule_id}`}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Excluir esta escala
+                  </DropdownMenuItem>
+                  {isRecurring && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => onDelete(schedule.schedule_id, true)}
+                        data-testid={`delete-all-${schedule.schedule_id}`}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Excluir todas as recorrências
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         </div>
