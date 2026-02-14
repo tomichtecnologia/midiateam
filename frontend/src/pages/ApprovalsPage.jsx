@@ -64,7 +64,8 @@ const statusLabels = {
   rejected: { label: "Rejeitado", variant: "destructive", icon: XCircle }
 };
 
-const ApprovalCard = ({ approval, onVote, onAdminAction, currentUserId, totalVoters, canVote, isAdmin, members }) => {
+const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, currentUserId, totalVoters, canVote, isAdmin, members }) => {
+  const [showReasons, setShowReasons] = useState(false);
   const ContentIcon = contentTypeIcons[approval.content_type] || FileText;
   const statusInfo = statusLabels[approval.status] || statusLabels.pending;
   const StatusIcon = statusInfo.icon;
@@ -77,6 +78,7 @@ const ApprovalCard = ({ approval, onVote, onAdminAction, currentUserId, totalVot
 
   const hasVotedFor = approval.votes_for?.includes(currentUserId);
   const hasVotedAgainst = approval.votes_against?.includes(currentUserId);
+  const rejectionReasons = approval.rejection_reasons || [];
 
   // Get voter names
   const getVoterNames = (voterIds) => {
