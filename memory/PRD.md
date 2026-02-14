@@ -48,6 +48,11 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 - [x] Sistema de recorrência (diário, semanal, mensal)
 - [x] Separação por tipos
 - [x] Funções/Responsabilidades delegadas a membros
+- [x] Sistema de Substituição/Troca de escalas
+- [x] Seção "Minhas Escalas" no Dashboard
+- [x] Badges: HOJE, AMANHÃ, Pendente, Confirmado
+- [x] Solicitações de troca com motivo
+- [x] Aceitação de troca por outros membros
 
 ### Membros
 - [x] CRUD completo
