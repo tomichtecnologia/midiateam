@@ -476,7 +476,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 @api_router.post("/auth/register")
 async def register_user(data: RegistrationRequest):
-    """Cadastro de novo usuário (aguarda aprovação)"""
+    """Cadastro de novo usuário (aguarda aprovação) - primeiro usuário vira admin automaticamente"""
     # Verificar se email já existe
     existing = await db.registered_users.find_one({"email": data.email})
     if existing:
@@ -486,7 +486,57 @@ async def register_user(data: RegistrationRequest):
     if existing_pending:
         raise HTTPException(status_code=400, detail="Já existe um cadastro pendente para este email")
     
-    # Criar registro pendente
+    # Verificar se é o primeiro usuário no sistema
+    user_count = await db.registered_users.count_documents({})
+    is_first_user = user_count == 0
+    
+    if is_first_user:
+        # Primeiro usuário: auto-aprovar como admin
+        # Buscar ou criar entidade padrão
+        default_entity = await db.entities.find_one({"name": "Padrão"}, {"_id": 0})
+        if not default_entity:
+            entity = Entity(name="Padrão", description="Entidade padrão do sistema")
+            doc = entity.model_dump()
+            doc["created_at"] = doc["created_at"].isoformat()
+            await db.entities.insert_one(doc)
+            default_entity = await db.entities.find_one({"name": "Padrão"}, {"_id": 0})
+        
+        entity_id = default_entity["entity_id"]
+        new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+        
+        # Criar usuário diretamente
+        new_user = {
+            "user_id": new_user_id,
+            "name": data.name,
+            "email": data.email,
+            "phone": data.phone,
+            "password_hash": hash_password(data.password),
+            "is_admin": True,
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        await db.registered_users.insert_one(new_user)
+        
+        # Criar membro admin
+        new_member = Member(
+            user_id=new_user_id,
+            entity_id=entity_id,
+            name=data.name,
+            email=data.email,
+            phone=data.phone,
+            is_admin=True,
+            can_vote=True
+        )
+        member_doc = new_member.model_dump()
+        member_doc["created_at"] = member_doc["created_at"].isoformat()
+        await db.members.insert_one(member_doc)
+        
+        return {
+            "message": "Você é o primeiro usuário! Sua conta foi criada como administrador. Faça login para continuar.",
+            "auto_approved": True
+        }
+    
+    # Demais usuários: criar registro pendente
     registration = PendingRegistration(
         name=data.name,
         email=data.email,
