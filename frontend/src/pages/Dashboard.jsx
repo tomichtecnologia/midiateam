@@ -5,6 +5,11 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Users,
   Calendar,
@@ -14,12 +19,18 @@ import {
   CheckCircle,
   XCircle,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  RefreshCw,
+  AlertTriangle,
+  UserPlus,
+  ArrowRightLeft,
+  Bell
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import axios from "axios";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, isPast, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
