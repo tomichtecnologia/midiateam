@@ -1,116 +1,103 @@
 <analysis>**original_problem_statement:**
-O usuário solicitou um sistema de gerenciamento de mídia para uma igreja, inicialmente chamado de Rhema Media, mas depois renomeado para Tomich Gestão de Mídia.
+O usuário solicitou um sistema de gerenciamento de mídia para uma igreja, Tomich Gestão de Mídia. O escopo evoluiu significativamente para incluir um sistema de autenticação personalizado (cadastro com aprovação de admin, login com senha, recuperação de senha) em vez do login do Google. O nome da aplicação deve ser alterado para Mídia Team. O sistema deve incluir gerenciamento de escalas com trocas/substituições, gerenciamento de membros, um sistema de aprovação de conteúdo com fluxo de rejeição/revisão, e um sistema de atribuição de responsabilidades fixas.
 
 **PRODUCT REQUIREMENTS:**
-- **Gerenciamento de Escalas:**
-    - Criar escalas para membros da equipe.
-    - Membros podem confirmar presença até um dia antes.
-    - Sistema para sugerir substitutos em caso de ausência.
-    - Funcionalidade de escalas recorrentes (diárias, semanais, mensais).
-    - Separação de escalas por tipo (ex: Aulas, Postagens).
-- **Gerenciamento de Membros:**
-    - Cadastro de membros com foto de perfil.
-    - Sistema de permissões para definir quem pode votar em aprovações.
-    - Grupos de usuários (Admin, Membro).
-- **Aprovação de Conteúdo:**
-    - Sistema de votação para aprovar conteúdo (ex: artes, vídeos).
-    - A aprovação requer mais de 50% dos votos dos membros elegíveis.
-    - Barra de progresso visual para a votação.
-    - Admins podem estornar votos e excluir pautas de aprovação.
-- **Gamificação:**
-    - Sistema de pontos, níveis e medalhas por interação na plataforma.
-    - Ranking de usuários.
-- **Dashboard:**
-    - Painel com estatísticas de crescimento e atividades.
-- **Multi-Entidade (Multi-Tenant):**
-    - Isolar dados por entidade/empresa. Usuários só podem ver dados da entidade à qual pertencem.
-    - Admins podem gerenciar a qual entidade um usuário pertence.
-- **Integrações de Terceiros:**
-    - **Google Calendar:** Para notificar sobre compromissos e escalas.
-    - **Notificações via WhatsApp:** Para avisos.
-    - **OpenAI GPT-5.2:** Para sugestões inteligentes dentro do sistema.
-- **Outros:**
-    - Área para armazenar links e senhas úteis.
+-   **Autenticação Personalizada (Novo):**
+    -   Remover login com Google.
+    -   Página de apresentação/home pública.
+    -   Página de cadastro (nome, email, senha) que envia para aprovação do admin.
+    -   Login via email e senha.
+    -   Fluxo de Esqueci minha senha.
+    -   Um admin deve poder aprovar novos usuários e atribuir-lhes funções.
+-   **Branding (Novo):**
+    -   Alterar o nome do site para Mídia Team.
+    -   Remover a marca d'água Made with Emergent.
+    -   Adicionar um rodapé com Desenvolvido por Tomich Tecnologia e informações de direitos autorais.
+-   **Gerenciamento de Escalas:**
+    -   Admin pode excluir escalas (individual ou todas as ocorrências de uma escala recorrente).
+    -   Membros podem ver Minhas Escalas no dashboard.
+    -   Membros podem confirmar presença, indicar ausência ou solicitar uma troca.
+    -   Fluxo de solicitação/aceitação de troca de escala entre membros.
+-   **Aprovação de Conteúdo:**
+    -   Sistema de votação para aprovar conteúdo (arte, vídeos).
+    -   Ao rejeitar, o usuário deve fornecer um motivo.
+    -   O criador do conteúdo rejeitado pode ver os motivos, postar uma resposta explicando as correções e solicitar uma reavaliação, que reinicia o processo de votação.
+-   **Responsabilidades Delegadas:**
+    -   Uma seção para criar e atribuir tarefas/responsabilidades fixas e contínuas a membros específicos (ex: Postar nas redes sociais).
+-   **Multi-Entidade (Multi-Tenant):**
+    -   Isolar dados por entidade/empresa. Usuários só podem ver dados da entidade à qual pertencem.
+-   **Gamificação e Dashboard:**
+    -   Sistema de pontos e ranking; painel com estatísticas.
 
-**User's preferred language**:
-português
+**User's preferred language**: português
 
 **what currently exists?**
-Um aplicativo full-stack foi construído usando FastAPI para o backend e React para o frontend. A aplicação inclui autenticação via Google, gerenciamento de membros, escalas (com recorrência), aprovações de conteúdo e um sistema de gamificação. Foram implementadas funcionalidades de administrador (admin) e a base para um sistema multi-entidade. O nome da aplicação foi alterado para Tomich Gestão de Mídia e a interface do usuário foi atualizada de acordo.
+Uma aplicação full-stack (FastAPI + React) funcional com as seguintes características implementadas e testadas:
+-   Autenticação via Google (a ser substituída).
+-   Sistema multi-entidade funcional.
+-   Funções de administrador (estornar votos, excluir aprovações) verificadas.
+-   Sistema de aprovação com fluxo completo de rejeição com motivo e reavaliação.
+-   Sistema de Responsabilidades Delegadas para tarefas fixas.
+-   Sistema de troca/substituição de escalas no dashboard do usuário.
+-   O agente iniciou a implementação do novo sistema de autenticação personalizado, criando os modelos de dados e os endpoints básicos no backend, mas nada foi integrado ao frontend.
 
 **Last working item**:
--   **Last item agent was working:** O agente estava implementando um sistema de multi-entidade e controles avançados de administrador. Isso incluiu:
-    1.  Adicionar um campo  aos principais modelos de dados (membros, escalas, aprovações) para isolar os dados por empresa/igreja.
-    2.  Implementar papéis de Admin com permissões para estornar votos e excluir pautas de aprovação.
-    3.  Atualizar a interface do usuário para exibir badges de Admin, Pode Votar e permitir que administradores gerenciem essas permissões.
+-   **Last item agent was working:** O agente estava no meio de uma grande reformulação solicitada pelo usuário, que envolve substituir o login do Google por um sistema de autenticação personalizado. Isso inclui criar uma nova página de cadastro com aprovação de admin, login com senha, recuperação de senha, e ao mesmo tempo, renomear a aplicação, remover a marca d'água e adicionar um rodapé personalizado.
 -   **Status:** IN PROGRESS
 -   **Agent Testing Done:** N
 -   **Which testing method agent to use?** both
 -   **User Testing Done:** N
 
 **All Pending/In progress Issue list**:
--   **Issue 1:** Concluir e testar o sistema multi-entidade e as funções de admin. (Priority: P0)
+-   **Issue 1:** Concluir a reformulação da autenticação e do branding da aplicação. (Priority: P0)
 
 **Issues Detail:**
 -   **Issue 1:**
-    -   **Attempted fixes:** O agente reescreveu  para adicionar a lógica de multi-entidade e os endpoints de admin. As páginas do frontend  e  foram atualizadas para refletir essas mudanças. Um script de migração foi executado para atualizar os dados existentes. No entanto, a implementação foi apenas superficialmente verificada com screenshots e não foi testada de ponta a ponta.
+    -   **Attempted fixes:** O agente criou os modelos Pydantic (, , ) e as funções de hash de senha no . Em seguida, adicionou os stubs para os novos endpoints de API (, , ) antes dos endpoints de autenticação do Google existentes. O trabalho está em um estágio muito inicial e não foi testado.
     -   **Next debug checklist:**
-        1.  **Isolamento de Dados:**
-            -   Crie dois usuários em duas entidades diferentes ( e ).
-            -   Faça login como usuário da  e verifique, através de chamadas de API (curl) e screenshots do frontend, que ele vê apenas membros, escalas e aprovações da .
-            -   Repita o processo para o usuário da .
-        2.  **Funções de Admin:**
-            -   Faça login como um administrador.
-            -   Verifique se o botão Estornar Voto na  funciona e chama o endpoint .
-            -   Verifique se o botão para excluir uma aprovação chama o endpoint  e remove o item da lista.
-        3.  **Gerenciamento de Entidades:**
-            -   Verifique se um admin pode alterar a entidade de um usuário na página .
-    -   **Why fix this issue and what will be achieved with the fix?** Esta é uma funcionalidade principal solicitada pelo usuário para permitir que o software seja usado por múltiplas organizações de forma independente e segura, além de fornecer as ferramentas de moderação necessárias para os administradores.
+        1.  **Backend:**
+            -   Finalizar e testar os endpoints , , e .
+            -   Implementar os endpoints para esqueci minha senha e reset de senha.
+            -   Implementar um endpoint para que admins possam excluir escalas (ex:  com um parâmetro como ).
+        2.  **Frontend:**
+            -   Criar uma nova página de apresentação () que será a rota .
+            -   Modificar  para ter rotas públicas (, , , ) e rotas privadas que exigem autenticação.
+            -   Criar uma página de cadastro () que envia os dados para .
+            -   Alterar  para usar um formulário de email/senha em vez do botão do Google.
+            -   Criar uma interface para que o admin aprove os cadastros pendentes (pode ser na ).
+            -   Implementar a funcionalidade de exclusão de escalas na , visível apenas para admins.
+            -   No  (ou em um novo componente de layout), alterar o nome da aplicação para Mídia Team, remover a marca d'água e adicionar o rodapé Desenvolvido por Tomich Tecnologia.
+    -   **Why fix this issue and what will be achieved with the fix?** Esta é a principal prioridade do usuário, alterando fundamentalmente como os usuários acessam e percebem a aplicação.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on other issue:** None
 
 **In progress Task List**:
--   **Task 1:** Finalizar e verificar o sistema multi-entidade e os controles de administrador. (Priority: P0)
-
-**Task Detail:**
--   **Task 1:**
-    -   **Where to resume:** O agente parou após exibir um screenshot da página de Aprovações no modo admin. O próximo passo é continuar a verificação, mostrando o menu de admin nos cards da aba Aprovados e, em seguida, executar um teste completo de ponta a ponta das novas funcionalidades.
-    -   **What will be achieved with this?** A aplicação terá um sistema multi-tenant funcional com papéis de administrador e controle granular sobre as votações, conforme solicitado pelo usuário.
+-   **Task 1:** Implementar o novo fluxo de autenticação, branding, e exclusão de escalas pelo admin. (Priority: P0)
+    -   **Where to resume:** Continuar a implementação dos endpoints de autenticação no , depois passar para a criação das novas páginas e modificação das existentes no frontend.
+    -   **What will be achieved with this?** A aplicação terá um fluxo de acesso mais controlado e profissional, alinhado com a visão do usuário.
     -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on something:** None
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks:**
-    -   (P1) Implementar a integração com o **Google Calendar** para notificações de escala. O playbook de integração já foi obtido.
-    -   (P1) Implementar notificações via **WhatsApp** para lembretes de escala. Requer a escolha e integração de um provedor (ex: Twilio).
+    -   (P1) Implementar a integração com o **Google Calendar** para notificações de escala.
+    -   (P1) Implementar notificações via **WhatsApp** para lembretes de escala.
 -   **Future Tasks:**
-    -   (P2) Desenvolver a lógica para **sugerir substitutos** quando um membro confirma ausência em uma escala.
-    -   (P2) Integrar o **OpenAI GPT-5.2** para fornecer sugestões inteligentes na plataforma, conforme planejado inicialmente.
+    -   (P2) Desenvolver a lógica para **sugerir substitutos** automaticamente quando um membro confirma ausência.
+    -   (P2) Integrar o **OpenAI GPT-5.2** para sugestões inteligentes.
 
 **Completed work in this session**
--   **Estrutura da Aplicação:** Criação do projeto full-stack (FastAPI, React, MongoDB).
--   **Autenticação:** Implementação do login com Google.
--   **Funcionalidades Principais:** CRUD para Membros, Escalas, Aprovações e Links.
--   **Gamificação:** Implementação de um sistema completo com pontos, níveis, medalhas e ranking ().
--   **Melhoria de Funcionalidades:**
-    -   **Escalas:** Adicionado sistema de recorrência e separação por tipo.
-    -   **Aprovações:** Adicionado sistema de permissão de voto ().
--   **UI/UX:**
-    -   Alteração do nome da aplicação para Tomich Gestão de Mídia.
-    -   Atualização da imagem de fundo da página de login.
--   **Correção de Bug:** Resolvido um erro no cadastro de membros relacionado ao  do MongoDB.
--   **Papéis de Admin (Base):** Implementada a estrutura inicial para usuários administradores e indicadores na UI.
+-   **Sistema Multi-Entidade e Admin:** Implementado, testado de ponta a ponta e validado.
+-   **Fluxo de Rejeição com Motivo:** Implementado e testado. Agora, as rejeições exigem um motivo que fica visível no card.
+-   **Fluxo de Reavaliação de Conteúdo:** Implementado e testado. Criadores de conteúdo rejeitado podem responder e solicitar uma nova votação.
+-   **Funções/Responsabilidades Delegadas:** Nova funcionalidade criada para atribuir tarefas fixas, com CRUD completo e UI dedicada na página de escalas. Implementada e testada.
+-   **Sistema de Troca de Escalas:** Implementado e testado. Membros podem ver suas escalas no dashboard e iniciar um fluxo para trocar de lugar com outros membros.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1:**
-    -   **Description:** Uma chamada ao  falhou ao tentar criar o arquivo de relatório . O agente não investigou a causa raiz e prosseguiu com testes manuais (curl, screenshots).
-    -   **Debug checklist:** A causa da falha do agente de teste precisa ser investigada. Pode ser um problema de permissão, um erro intermitente ou um bug na configuração do teste que não foi capturado.
-    -   **Why to solve this issue and what will be achieved with this?** Confiar em testes manuais é arriscado. Corrigir o agente de teste garante uma verificação de regressão mais robusta e confiável para futuras alterações.
-    -   **Should Test frontend/backend/both after fix:** both
-    -   **Is recurring issue?** N
+-   Nenhum. O problema anterior com o  não ocorreu nesta sessão; o agente foi utilizado com sucesso várias vezes.
 
 **Known issue recurrence from previous fork**
 -   N/A
@@ -122,163 +109,85 @@ Um aplicativo full-stack foi construído usando FastAPI para o backend e React p
 -   **Frontend:** React, Tailwind CSS, , Shadcn UI.
 -   **Backend:** FastAPI, Pydantic, .
 -   **Database:** MongoDB.
--   **Authentication:** Google OAuth.
--   **Architecture:** Monolithic backend () com um frontend SPA, em transição para uma arquitetura multi-tenant.
+-   **Authentication:** Em transição de Google OAuth para JWT personalizado com  para hashing de senha.
+-   **Architecture:** Monolithic backend com um frontend SPA.
 
 **key DB schema**
+-   **users:**  (Nova coleção para auth personalizado)
 -   **members:** 
 -   **schedules:** 
--   **approvals:** 
--   **entities:** (Implícito)  - Deveria ser uma coleção dedicada.
+-   **approvals:**  (Campos adicionados)
+-   **delegated_responsibilities:**  (Nova coleção)
+-   **swap_requests:**  (Nova coleção)
 
 **changes in tech stack**
--   Nenhuma mudança fundamental na stack. Foram adicionadas dependências via 
-Usage:   
-  pip <command> [options]
-
-Commands:
-  install                     Install packages.
-  lock                        Generate a lock file.
-  download                    Download packages.
-  uninstall                   Uninstall packages.
-  freeze                      Output installed packages in requirements format.
-  inspect                     Inspect the python environment.
-  list                        List installed packages.
-  show                        Show information about installed packages.
-  check                       Verify installed packages have compatible dependencies.
-  config                      Manage local and global configuration.
-  search                      Search PyPI for packages.
-  cache                       Inspect and manage pip's wheel cache.
-  index                       Inspect information available from package indexes.
-  wheel                       Build wheels from your requirements.
-  hash                        Compute hashes of package archives.
-  completion                  A helper command used for command completion.
-  debug                       Show information useful for debugging.
-  help                        Show help for commands.
-
-General Options:
-  -h, --help                  Show help.
-  --debug                     Let unhandled exceptions propagate outside the
-                              main subroutine, instead of logging them to
-                              stderr.
-  --isolated                  Run pip in an isolated mode, ignoring
-                              environment variables and user configuration.
-  --require-virtualenv        Allow pip to only run in a virtual environment;
-                              exit with an error otherwise.
-  --python <python>           Run pip with the specified Python interpreter.
-  -v, --verbose               Give more output. Option is additive, and can be
-                              used up to 3 times.
-  -V, --version               Show version and exit.
-  -q, --quiet                 Give less output. Option is additive, and can be
-                              used up to 3 times (corresponding to WARNING,
-                              ERROR, and CRITICAL logging levels).
-  --log <path>                Path to a verbose appending log.
-  --no-input                  Disable prompting for input.
-  --keyring-provider <keyring_provider>
-                              Enable the credential lookup via the keyring
-                              library if user input is allowed. Specify which
-                              mechanism to use [auto, disabled, import,
-                              subprocess]. (default: auto)
-  --proxy <proxy>             Specify a proxy in the form
-                              scheme://[user:passwd@]proxy.server:port.
-  --retries <retries>         Maximum attempts to establish a new HTTP
-                              connection. (default: 5)
-  --timeout <sec>             Set the socket timeout (default 15 seconds).
-  --exists-action <action>    Default action when a path already exists:
-                              (s)witch, (i)gnore, (w)ipe, (b)ackup, (a)bort.
-  --trusted-host <hostname>   Mark this host or host:port pair as trusted,
-                              even though it does not have valid or any HTTPS.
-  --cert <path>               Path to PEM-encoded CA certificate bundle. If
-                              provided, overrides the default. See 'SSL
-                              Certificate Verification' in pip documentation
-                              for more information.
-  --client-cert <path>        Path to SSL client certificate, a single file
-                              containing the private key and the certificate
-                              in PEM format.
-  --cache-dir <dir>           Store the cache data in <dir>.
-  --no-cache-dir              Disable the cache.
-  --disable-pip-version-check
-                              Don't periodically check PyPI to determine
-                              whether a new version of pip is available for
-                              download. Implied with --no-index.
-  --no-color                  Suppress colored output.
-  --use-feature <feature>     Enable new functionality, that may be backward
-                              incompatible.
-  --use-deprecated <feature>  Enable deprecated functionality, that will be
-                              removed in the future.
-  --resume-retries <resume_retries>
-                              Maximum attempts to resume or restart an
-                              incomplete download. (default: 5) e yarn install v1.22.22
-[1/4] Resolving packages...
-[2/4] Fetching packages...
-[3/4] Linking dependencies...
-[4/4] Building fresh packages...
-success Saved lockfile.
-Done in 0.10s. para suportar novas funcionalidades.
+-   Adicionada a dependência  ao backend para lidar com o hashing de senhas.
 
 **All files of reference**
--   : Arquivo central com toda a lógica do backend. Foi modificado extensivamente para adicionar todas as funcionalidades, incluindo o sistema multi-entidade.
--   : Página de gerenciamento de membros, atualizada para incluir os controles de  e .
--   : Página de aprovações, atualizada para incluir os controles de admin (estornar voto, excluir) e a lógica de contagem de votantes.
--   : Página de escalas, atualizada com abas e sistema de recorrência.
--   : Nova página criada para o sistema de gamificação.
--   : Documento de requisitos e progresso do projeto.
+-   : Arquivo massivamente modificado para adicionar todas as novas funcionalidades (rejeição com motivo, reavaliação, responsabilidades, troca de escalas) e para iniciar a implementação do novo sistema de autenticação.
+-   : Atualizado para suportar os novos fluxos de rejeição e reavaliação.
+-   : Fortemente modificado para exibir os motivos de rejeição e a interface de resposta/reavaliação do criador.
+-   : Atualizado para incluir a nova aba Responsabilidades e seu conteúdo.
+-   : Atualizado para incluir a seção Minhas Escalas com ações de confirmação e troca.
 
 **Areas that need refactoring**:
--   **:** O arquivo está se tornando um grande monólito. A lógica deve ser refatorada e dividida em múltiplos arquivos usando  do FastAPI para separar as responsabilidades por funcionalidade (ex: , ).
--   **Gerenciamento de Estado do Frontend:** O estado global (como informações do usuário logado) deve ser gerenciado com uma solução mais robusta, como React Context ou Zustand, para evitar prop-drilling excessivo e simplificar o compartilhamento de dados entre os componentes.
+-   **:** A refatoração é crítica. O arquivo é um monólito com mais de 1300 linhas e contém a lógica de múltiplos domínios (auth, membros, escalas, aprovações, etc.). É urgente dividi-lo em s separados por funcionalidade (ex: , ).
+-   **Gerenciamento de Estado do Frontend:** O estado global (usuário logado, permissões) está se tornando complexo. Adoção de React Context ou Zustand simplificaria o código e evitaria prop-drilling.
 
 **key api endpoints**
--   , , 
--    (GET, POST),  (PUT)
--    (GET, POST)
--    (GET, POST),  (DELETE),  (POST)
--    (POST) - **NOVO, APENAS ADMIN**
--   
--   
+-    (POST) **(NOVO, EM ANDAMENTO)**
+-    (POST) **(NOVO, EM ANDAMENTO)**
+-    (POST) **(NOVO, EM ANDAMENTO)**
+-    (POST) **(NOVO)**
+-    (POST) **(NOVO)**
+-    (GET, POST, PUT, DELETE) **(NOVO)**
+-    (GET, POST) **(NOVO)**
+-    (POST) **(NOVO)**
 
 **Critical Info for New Agent**
--   A aplicação foi renomeada para **Tomich Gestão de Mídia**. Use este nome em toda a comunicação com o usuário.
--   A prioridade máxima é finalizar e testar a funcionalidade **multi-entidade** e de **administrador**. A base está implementada, mas o isolamento de dados entre entidades não foi verificado e é um ponto crítico.
--   O  falhou uma vez e foi ignorado. Considere executar o agente de teste após as próximas alterações para garantir a estabilidade do projeto.
+-   A prioridade máxima e absoluta é completar a transição do sistema de autenticação. O usuário solicitou a remoção do Login com Google e a implementação de um fluxo de cadastro/aprovação/login personalizado. Não continue a desenvolver nenhuma outra funcionalidade até que esta esteja completa e funcional.
+-   A aplicação deve ser renomeada para Mídia Team e o branding (rodapé, sem marca d'água) deve ser atualizado como parte desta tarefa.
+-   O  está extremamente grande. Após a implementação da autenticação, o próximo passo lógico deve ser a refatoração do backend para s.
 
 **documents and test reports created in this job**
+-    (Atualizado múltiplas vezes)
+-   
+-   
+-   
 -   
 -   
 -   
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User (PENDING):** Pediu para implementar sistema multi-entidade e papéis de admin com poder para reverter votos e excluir aprovações.
-2.  **Agent:** Iniciou a implementação.
-3.  **User:** Pediu para o sistema de votação considerar apenas usuários habilitados e mostrar contadores.
-4.  **Agent:** Implementou o sistema de permissão de voto.
-5.  **User:** Sugeriu melhorias na página de escalas (tipos, repetição, abas).
-6.  **Agent:** Implementou as melhorias na página de escalas.
-7.  **User:** Reclamou da imagem de capa e pediu uma mais adequada.
-8.  **Agent:** Atualizou a imagem de capa.
-9.  **User:** Perguntou como acessar o sistema.
-10. **Agent:** Forneceu o link e as instruções de login.
+1.  **User (PENDING):** Solicitou uma reformulação completa do sistema de login e branding.
+2.  **Agent:** Concordou e iniciou a implementação do backend.
+3.  **User:** Pediu para implementar um sistema de substituição de escalas.
+4.  **Agent:** Implementou e testou com sucesso o sistema de substituição.
+5.  **User:** Sugeriu um sistema de resposta do criador a conteúdos rejeitados.
+6.  **Agent:** Implementou e testou com sucesso o fluxo de resposta e reavaliação.
+7.  **User:** Pediu um sistema de Funções Delegadas (responsabilidades fixas).
+8.  **Agent:** Implementou e testou com sucesso o sistema de responsabilidades.
+9.  **User:** Pediu para adicionar um campo de motivo ao rejeitar uma aprovação.
+10. **Agent:** Implementou e testou com sucesso o recurso de motivo de rejeição.
 
 **Project Health Check:**
--   **Broken:** O sistema multi-entidade está parcialmente implementado e não foi testado. As regras de isolamento de dados, que são cruciais, podem estar incorretas ou ausentes. As novas funções de administrador também não foram testadas.
+-   **Broken:** O sistema de autenticação está em um estado de transição quebrado. O backend iniciou a implementação de endpoints de login com senha, mas o frontend ainda depende inteiramente do fluxo de login do Google, que deve ser removido. A aplicação não é atualmente acessível para novos usuários ou sem o fluxo antigo.
 -   **Mocked:** N/A
 
 **3rd Party Integrations**
--   **Emergent-managed Google Auth:** Em uso.
+-   **Emergent-managed Google Auth:** Atualmente em uso, mas **deve ser removido** e substituído por uma solução de JWT personalizada.
 -   **Google Calendar:** Requisitado, playbook obtido, mas **não implementado**.
--   **OpenAI GPT-5.2:** Planejado, playbook obtido, mas **não implementado**.
+-   **OpenAI GPT-5.2:** Planejado, mas **não implementado**.
 -   **WhatsApp:** Requisitado, mas não planejado nem implementado.
 
 **Testing status**
--   **Testing agent used after significant changes:** YES, mas falhou uma vez e foi posteriormente substituído por testes manuais.
+-   **Testing agent used after significant changes:** YES. O agente usou  com sucesso após a conclusão de cada uma das quatro principais funcionalidades implementadas nesta sessão, garantindo a qualidade e estabilidade antes de passar para a próxima tarefa.
 -   **Troubleshoot agent used after agent stuck in loop:** NO
 -   **Test files created:** []
--   **Known regressions:** Desconhecidas. As últimas alterações são significativas e não foram testadas de forma abrangente, portanto, há risco de regressões.
+-   **Known regressions:** A funcionalidade de login está quebrada devido à transição em andamento.
 
 **Credentials to test flow:**
-O login é feito através do botão Entrar com Google, que usa um fluxo de autenticação simulado no ambiente de desenvolvimento. Para testes de backend, o agente criou sessões de teste manualmente para acessar endpoints autenticados.
+Atualmente, o login ainda funciona através do botão Entrar com Google no ambiente de desenvolvimento. No entanto, o objetivo é substituir isso por um login de email/senha. Para os testes de backend, o agente cria manualmente tokens de sessão.
 
 **What agent forgot to execute**
--   **Investigar Falha do Agente de Teste:** O agente não investigou por que o  não conseguiu gerar o relatório , o que representa um risco para a qualidade do código.
--   **Teste Completo do Sistema Multi-Entidade:** A implementação da funcionalidade multi-tenant foi apenas superficial. O requisito principal — isolamento de dados entre entidades — não foi testado.
--   **Integração com Google Calendar:** Embora tenha sido um requisito inicial confirmado, a integração nunca foi implementada.</analysis>
+-   O agente está no meio da execução de uma solicitação de usuário muito grande e complexa (mensagem 347). Nenhuma parte foi esquecida, mas a tarefa está apenas no início e abrange várias áreas da aplicação (backend, frontend, auth, UI). A prioridade é continuar e concluir esta tarefa de forma faseada.</analysis>
