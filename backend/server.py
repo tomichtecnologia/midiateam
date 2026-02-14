@@ -448,7 +448,260 @@ async def check_admin(user: User, entity_id: str):
         raise HTTPException(status_code=403, detail="Acesso negado. Apenas administradores podem realizar esta ação.")
     return True
 
-# ============== AUTH ROUTES ==============
+# ============== PASSWORD HELPERS ==============
+
+def hash_password(password: str) -> str:
+    """Hash password using SHA256 with salt"""
+    salt = secrets.token_hex(16)
+    hashed = hashlib.sha256((password + salt).encode()).hexdigest()
+    return f"{salt}${hashed}"
+
+def verify_password(password: str, password_hash: str) -> bool:
+    """Verify password against hash"""
+    try:
+        salt, hashed = password_hash.split("$")
+        return hashlib.sha256((password + salt).encode()).hexdigest() == hashed
+    except:
+        return False
+
+# ============== REGISTRATION ROUTES ==============
+
+@api_router.post("/auth/register")
+async def register_user(data: RegistrationRequest):
+    """Cadastro de novo usuário (aguarda aprovação)"""
+    # Verificar se email já existe
+    existing = await db.registered_users.find_one({"email": data.email})
+    if existing:
+        raise HTTPException(status_code=400, detail="Este email já está cadastrado")
+    
+    existing_pending = await db.pending_registrations.find_one({"email": data.email, "status": "pending"})
+    if existing_pending:
+        raise HTTPException(status_code=400, detail="Já existe um cadastro pendente para este email")
+    
+    # Criar registro pendente
+    registration = PendingRegistration(
+        name=data.name,
+        email=data.email,
+        phone=data.phone,
+        password_hash=hash_password(data.password)
+    )
+    doc = registration.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.pending_registrations.insert_one(doc)
+    
+    return {"message": "Cadastro enviado! Aguarde a aprovação do administrador.", "registration_id": doc["registration_id"]}
+
+@api_router.post("/auth/login")
+async def login_user(data: LoginRequest, response: Response):
+    """Login com email e senha"""
+    user = await db.registered_users.find_one({"email": data.email}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    
+    if not user.get("is_active", True):
+        raise HTTPException(status_code=403, detail="Sua conta está desativada. Entre em contato com o administrador.")
+    
+    if not verify_password(data.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Email ou senha incorretos")
+    
+    # Criar sessão
+    session_token = f"session_{secrets.token_hex(32)}"
+    session_doc = {
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.user_sessions.insert_one(session_doc)
+    
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    return {
+        "message": "Login realizado com sucesso!",
+        "user": {
+            "user_id": user["user_id"],
+            "name": user["name"],
+            "email": user["email"],
+            "is_admin": user.get("is_admin", False)
+        }
+    }
+
+@api_router.get("/auth/pending-registrations")
+async def get_pending_registrations(user: User = Depends(get_current_user)):
+    """Listar cadastros pendentes (apenas admin)"""
+    await check_admin(user)
+    
+    registrations = await db.pending_registrations.find(
+        {"status": "pending"},
+        {"_id": 0, "password_hash": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return registrations
+
+@api_router.post("/auth/approve-registration/{registration_id}")
+async def approve_registration(registration_id: str, user: User = Depends(get_current_user)):
+    """Aprovar cadastro (apenas admin)"""
+    await check_admin(user)
+    
+    entity_id = await get_current_entity_id(user)
+    
+    registration = await db.pending_registrations.find_one(
+        {"registration_id": registration_id, "status": "pending"},
+        {"_id": 0}
+    )
+    
+    if not registration:
+        raise HTTPException(status_code=404, detail="Cadastro não encontrado ou já processado")
+    
+    # Criar usuário registrado
+    new_user_id = f"user_{uuid.uuid4().hex[:12]}"
+    new_user = {
+        "user_id": new_user_id,
+        "name": registration["name"],
+        "email": registration["email"],
+        "phone": registration.get("phone"),
+        "password_hash": registration["password_hash"],
+        "is_admin": False,
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.registered_users.insert_one(new_user)
+    
+    # Criar membro associado
+    new_member = Member(
+        user_id=new_user_id,
+        entity_id=entity_id,
+        name=registration["name"],
+        email=registration["email"],
+        phone=registration.get("phone")
+    )
+    member_doc = new_member.model_dump()
+    member_doc["created_at"] = member_doc["created_at"].isoformat()
+    await db.members.insert_one(member_doc)
+    
+    # Atualizar registro
+    await db.pending_registrations.update_one(
+        {"registration_id": registration_id},
+        {"$set": {
+            "status": "approved",
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "approved_by": user.user_id
+        }}
+    )
+    
+    return {"message": f"Cadastro de {registration['name']} aprovado com sucesso!"}
+
+@api_router.post("/auth/reject-registration/{registration_id}")
+async def reject_registration(registration_id: str, user: User = Depends(get_current_user)):
+    """Rejeitar cadastro (apenas admin)"""
+    await check_admin(user)
+    
+    result = await db.pending_registrations.update_one(
+        {"registration_id": registration_id, "status": "pending"},
+        {"$set": {"status": "rejected"}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Cadastro não encontrado")
+    
+    return {"message": "Cadastro rejeitado"}
+
+@api_router.post("/auth/change-password")
+async def change_password(data: ChangePasswordRequest, user: User = Depends(get_current_user)):
+    """Mudar própria senha"""
+    reg_user = await db.registered_users.find_one({"user_id": user.user_id}, {"_id": 0})
+    
+    if not reg_user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    # Verificar senha atual (exceto se admin mudando a própria)
+    if data.current_password:
+        if not verify_password(data.current_password, reg_user["password_hash"]):
+            raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    
+    # Atualizar senha
+    await db.registered_users.update_one(
+        {"user_id": user.user_id},
+        {"$set": {"password_hash": hash_password(data.new_password)}}
+    )
+    
+    return {"message": "Senha alterada com sucesso!"}
+
+@api_router.post("/auth/admin-change-password/{target_user_id}")
+async def admin_change_password(target_user_id: str, data: ChangePasswordRequest, user: User = Depends(get_current_user)):
+    """Admin muda senha de outro usuário"""
+    await check_admin(user)
+    
+    result = await db.registered_users.update_one(
+        {"user_id": target_user_id},
+        {"$set": {"password_hash": hash_password(data.new_password)}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    return {"message": "Senha alterada com sucesso!"}
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(data: ResetPasswordRequest):
+    """Solicitar recuperação de senha"""
+    user = await db.registered_users.find_one({"email": data.email})
+    
+    if not user:
+        # Não revelar se o email existe
+        return {"message": "Se o email estiver cadastrado, você receberá instruções para redefinir sua senha."}
+    
+    # Gerar token de reset
+    reset_token = secrets.token_urlsafe(32)
+    expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+    
+    await db.registered_users.update_one(
+        {"email": data.email},
+        {"$set": {"reset_token": reset_token, "reset_token_expires": expires}}
+    )
+    
+    # Em produção, enviar email com o link
+    # Por enquanto, retornamos o token (em dev)
+    return {
+        "message": "Token de recuperação gerado. Em produção, seria enviado por email.",
+        "reset_token": reset_token  # Remover em produção
+    }
+
+@api_router.post("/auth/reset-password/{token}")
+async def reset_password(token: str, data: ChangePasswordRequest):
+    """Resetar senha com token"""
+    user = await db.registered_users.find_one({"reset_token": token})
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Token inválido ou expirado")
+    
+    # Verificar expiração
+    if user.get("reset_token_expires"):
+        expires = datetime.fromisoformat(user["reset_token_expires"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires:
+            raise HTTPException(status_code=400, detail="Token expirado. Solicite novamente.")
+    
+    # Atualizar senha e limpar token
+    await db.registered_users.update_one(
+        {"reset_token": token},
+        {"$set": {
+            "password_hash": hash_password(data.new_password),
+            "reset_token": None,
+            "reset_token_expires": None
+        }}
+    )
+    
+    return {"message": "Senha redefinida com sucesso! Você já pode fazer login."}
+
+# ============== GOOGLE AUTH ROUTES (existing) ==============
 
 @api_router.post("/auth/session")
 async def create_session(request: Request, response: Response):
