@@ -488,6 +488,44 @@ export default function SchedulesPage() {
     }
   };
 
+  // ============== DELETE SCHEDULE FUNCTIONS ==============
+
+  const handleDeleteClick = (scheduleId, deleteAll) => {
+    const schedule = schedules.find(s => s.schedule_id === scheduleId);
+    setDeleteDialog({
+      open: true,
+      scheduleId,
+      deleteAll,
+      scheduleName: schedule?.title || "esta escala"
+    });
+  };
+
+  const handleDeleteSchedule = async () => {
+    const { scheduleId, deleteAll } = deleteDialog;
+    
+    try {
+      const url = deleteAll 
+        ? `${API}/schedules/${scheduleId}?delete_recurring=true`
+        : `${API}/schedules/${scheduleId}`;
+      
+      await axios.delete(url, { withCredentials: true });
+      
+      if (deleteAll) {
+        toast.success("Todas as escalas recorrentes foram excluídas!");
+      } else {
+        toast.success("Escala excluída com sucesso!");
+      }
+      
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting schedule:", error);
+      const message = error.response?.data?.detail || "Erro ao excluir escala";
+      toast.error(message);
+    } finally {
+      setDeleteDialog({ open: false, scheduleId: null, deleteAll: false, scheduleName: "" });
+    }
+  };
+
   const toggleRepeatDay = (day) => {
     if (formData.repeat_days.includes(day)) {
       setFormData({
