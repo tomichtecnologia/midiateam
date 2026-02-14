@@ -428,7 +428,7 @@ export default function Dashboard() {
         `${API}/schedules/swap-request`,
         {
           schedule_id: selectedScheduleForSwap.schedule_id,
-          target_member_id: swapTargetMember || null,
+          target_member_id: swapTargetMember && swapTargetMember !== "any" ? swapTargetMember : null,
           reason: swapReason.trim()
         },
         { withCredentials: true }
