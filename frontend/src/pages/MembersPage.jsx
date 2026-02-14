@@ -272,6 +272,28 @@ export default function MembersPage() {
     return matchesSearch && matchesDepartment;
   });
 
+  const handleApproveRegistration = async (registrationId) => {
+    try {
+      await axios.post(`${API}/auth/approve-registration/${registrationId}`, {}, { withCredentials: true });
+      toast.success("Cadastro aprovado com sucesso!");
+      fetchPendingRegistrations();
+      fetchMembers();
+    } catch (error) {
+      toast.error("Erro ao aprovar cadastro");
+    }
+  };
+
+  const handleRejectRegistration = async (registrationId) => {
+    if (!window.confirm("Tem certeza que deseja rejeitar este cadastro?")) return;
+    try {
+      await axios.post(`${API}/auth/reject-registration/${registrationId}`, {}, { withCredentials: true });
+      toast.success("Cadastro rejeitado");
+      fetchPendingRegistrations();
+    } catch (error) {
+      toast.error("Erro ao rejeitar cadastro");
+    }
+  };
+
   const votersCount = members.filter(m => m.can_vote).length;
   const adminsCount = members.filter(m => m.is_admin).length;
 
