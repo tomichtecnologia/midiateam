@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Plus,
   ThumbsUp,
@@ -31,7 +32,9 @@ import {
   RotateCcw,
   Trash2,
   UserMinus,
-  Shield
+  Shield,
+  MessageSquare,
+  ChevronDown
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
