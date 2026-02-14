@@ -68,8 +68,12 @@ const statusLabels = {
   rejected: { label: "Rejeitado", variant: "destructive", icon: XCircle }
 };
 
-const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, currentUserId, totalVoters, canVote, isAdmin, members }) => {
+const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, onRequestReevaluation, currentUserId, totalVoters, canVote, isAdmin, members }) => {
   const [showReasons, setShowReasons] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [responseText, setResponseText] = useState(approval.creator_response || "");
+  const [isResponding, setIsResponding] = useState(false);
+  
   const ContentIcon = contentTypeIcons[approval.content_type] || FileText;
   const statusInfo = statusLabels[approval.status] || statusLabels.pending;
   const StatusIcon = statusInfo.icon;
@@ -83,6 +87,9 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, currentUserId
   const hasVotedFor = approval.votes_for?.includes(currentUserId);
   const hasVotedAgainst = approval.votes_against?.includes(currentUserId);
   const rejectionReasons = approval.rejection_reasons || [];
+  const revisionHistory = approval.revision_history || [];
+  const isCreator = approval.submitted_by === currentUserId;
+  const revisionCount = approval.revision_count || 1;
 
   // Get voter names
   const getVoterNames = (voterIds) => {
@@ -95,8 +102,25 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, currentUserId
   const votersForNames = getVoterNames(approval.votes_for);
   const votersAgainstNames = getVoterNames(approval.votes_against);
 
+  const handleSaveResponse = async () => {
+    if (!responseText.trim()) {
+      toast.error("Digite uma resposta");
+      return;
+    }
+    setIsResponding(true);
+    await onRespond(approval.approval_id, responseText.trim());
+    setIsResponding(false);
+  };
+
   return (
     <Card className="card-hover overflow-hidden" data-testid={`approval-card-${approval.approval_id}`}>
+      {/* Revision Badge */}
+      {revisionCount > 1 && (
+        <div className="bg-amber-100 text-amber-800 text-xs font-medium px-3 py-1 flex items-center justify-center gap-1">
+          <RefreshCw className="w-3 h-3" />
+          Revisão {revisionCount}
+        </div>
+      )}
       {/* Thumbnail */}
       {approval.thumbnail_url ? (
         <div className="aspect-video relative overflow-hidden bg-muted">
