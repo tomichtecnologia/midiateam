@@ -1452,12 +1452,46 @@ async def update_schedule(schedule_id: str, schedule_data: ScheduleCreate, user:
     return await db.schedules.find_one({"schedule_id": schedule_id}, {"_id": 0})
 
 @api_router.delete("/schedules/{schedule_id}")
-async def delete_schedule(schedule_id: str, user: User = Depends(get_current_user)):
+async def delete_schedule(
+    schedule_id: str, 
+    delete_recurring: bool = False,
+    user: User = Depends(get_current_user)
+):
+    """Excluir escala - Admin pode excluir individual ou todas recorrentes"""
     entity_id = await get_current_entity_id(user)
-    result = await db.schedules.delete_one({"schedule_id": schedule_id, "entity_id": entity_id})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Schedule not found")
-    return {"message": "Schedule deleted"}
+    
+    # Verificar se é admin
+    await check_admin(user, entity_id)
+    
+    # Buscar a escala
+    schedule = await db.schedules.find_one(
+        {"schedule_id": schedule_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Escala não encontrada")
+    
+    if delete_recurring and schedule.get("repeat_type") != "none":
+        # Excluir todas as escalas com o mesmo parent ou que são parent desta
+        parent_id = schedule.get("parent_schedule_id") or schedule_id
+        
+        # Excluir escalas filhas e a própria escala pai
+        result = await db.schedules.delete_many({
+            "entity_id": entity_id,
+            "$or": [
+                {"schedule_id": parent_id},
+                {"parent_schedule_id": parent_id}
+            ]
+        })
+        
+        return {"message": f"{result.deleted_count} escalas excluídas com sucesso"}
+    else:
+        # Excluir apenas esta escala
+        result = await db.schedules.delete_one({"schedule_id": schedule_id, "entity_id": entity_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Escala não encontrada")
+        return {"message": "Escala excluída com sucesso"}
 
 @api_router.post("/schedules/{schedule_id}/attendance")
 async def confirm_attendance(schedule_id: str, confirmation: AttendanceConfirmation, user: User = Depends(get_current_user)):
