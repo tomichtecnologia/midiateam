@@ -361,6 +361,11 @@ export default function ApprovalsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [votingStats, setVotingStats] = useState({ total_voters: 0, can_vote: false, is_admin: false });
+  
+  // State for rejection modal
+  const [rejectingApprovalId, setRejectingApprovalId] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -414,11 +419,11 @@ export default function ApprovalsPage() {
     }
   };
 
-  const handleVote = async (approvalId, vote) => {
+  const handleVote = async (approvalId, vote, reason = null) => {
     try {
       await axios.post(
         `${API}/approvals/${approvalId}/vote`,
-        { approval_id: approvalId, vote },
+        { approval_id: approvalId, vote, reason },
         { withCredentials: true }
       );
       toast.success(vote === "for" ? "Voto de aprovação registrado!" : "Voto de rejeição registrado!");
@@ -427,6 +432,8 @@ export default function ApprovalsPage() {
       console.error("Error voting:", error);
       if (error.response?.status === 403) {
         toast.error("Você não tem permissão para votar");
+      } else if (error.response?.status === 400) {
+        toast.error(error.response?.data?.detail || "Erro ao votar");
       } else {
         toast.error("Erro ao votar");
       }
