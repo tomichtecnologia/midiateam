@@ -134,6 +134,12 @@ class AttendanceConfirmation(BaseModel):
     status: str
     substitute_id: Optional[str] = None
 
+class RejectionReason(BaseModel):
+    user_id: str
+    user_name: str
+    reason: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class ContentApproval(BaseModel):
     model_config = ConfigDict(extra="ignore")
     approval_id: str = Field(default_factory=lambda: f"approval_{uuid.uuid4().hex[:12]}")
@@ -146,6 +152,7 @@ class ContentApproval(BaseModel):
     submitted_by: str
     votes_for: List[str] = []
     votes_against: List[str] = []
+    rejection_reasons: List[dict] = []  # Lista de motivos de rejeição
     status: str = "pending"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -159,6 +166,7 @@ class ContentApprovalCreate(BaseModel):
 class Vote(BaseModel):
     approval_id: str
     vote: str
+    reason: Optional[str] = None  # Motivo obrigatório para rejeição
 
 class Link(BaseModel):
     model_config = ConfigDict(extra="ignore")
