@@ -544,6 +544,75 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Swap Requests Alert */}
+      {relevantSwapRequests.length > 0 && (
+        <Alert className="bg-amber-50 border-amber-200">
+          <Bell className="h-4 w-4 text-amber-600" />
+          <AlertDescription className="text-amber-800">
+            <strong>{relevantSwapRequests.filter(r => r.can_accept).length}</strong> solicitação(ões) de troca aguardando resposta
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* MY SCHEDULES Section */}
+      {mySchedules.length > 0 && (
+        <Card data-testid="my-schedules-card">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CardTitle className="font-outfit text-lg">Minhas Escalas</CardTitle>
+                <Badge variant="secondary">{mySchedules.length}</Badge>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/schedules">
+                  Ver todas
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {mySchedules.slice(0, 6).map((schedule) => (
+                <MyScheduleCard
+                  key={schedule.schedule_id}
+                  schedule={schedule}
+                  currentMemberId={currentMember?.member_id}
+                  onConfirm={handleConfirmAttendance}
+                  onDecline={handleDeclineAttendance}
+                  onRequestSwap={handleOpenSwapDialog}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Swap Requests Section */}
+      {relevantSwapRequests.length > 0 && (
+        <Card data-testid="swap-requests-card" className="border-amber-200">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <ArrowRightLeft className="w-5 h-5 text-amber-600" />
+              <CardTitle className="font-outfit text-lg">Solicitações de Troca</CardTitle>
+              <Badge className="bg-amber-500">{relevantSwapRequests.length}</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {relevantSwapRequests.map((request) => (
+                <SwapRequestCard
+                  key={request.swap_id}
+                  request={request}
+                  onAccept={handleAcceptSwap}
+                  onCancel={handleCancelSwap}
+                />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Schedules */}
@@ -608,6 +677,77 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Swap Request Dialog */}
+      <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit flex items-center gap-2">
+              <ArrowRightLeft className="w-5 h-5 text-amber-600" />
+              Solicitar Troca de Escala
+            </DialogTitle>
+          </DialogHeader>
+          {selectedScheduleForSwap && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="font-medium">{selectedScheduleForSwap.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {format(parseISO(selectedScheduleForSwap.date), "EEEE, d 'de' MMMM", { locale: ptBR })}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedScheduleForSwap.start_time} - {selectedScheduleForSwap.end_time}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Motivo da troca *</Label>
+                <Textarea
+                  placeholder="Ex: Tenho um compromisso médico nesse horário..."
+                  value={swapReason}
+                  onChange={(e) => setSwapReason(e.target.value)}
+                  data-testid="swap-reason-input"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Pedir para alguém específico? (opcional)</Label>
+                <Select value={swapTargetMember} onValueChange={setSwapTargetMember}>
+                  <SelectTrigger data-testid="swap-target-select">
+                    <SelectValue placeholder="Qualquer pessoa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Qualquer pessoa</SelectItem>
+                    {members
+                      .filter(m => m.member_id !== currentMember?.member_id && m.active)
+                      .map((member) => (
+                        <SelectItem key={member.member_id} value={member.member_id}>
+                          {member.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se não selecionar, qualquer membro pode aceitar sua troca
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancelar</Button>
+            </DialogClose>
+            <Button 
+              onClick={handleCreateSwapRequest}
+              disabled={!swapReason.trim()}
+              className="bg-amber-600 hover:bg-amber-700"
+              data-testid="submit-swap-btn"
+            >
+              <ArrowRightLeft className="w-4 h-4 mr-2" />
+              Solicitar Troca
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
