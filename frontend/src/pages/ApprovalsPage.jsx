@@ -273,6 +273,36 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, currentUserId
           </div>
         </div>
 
+        {/* Rejection Reasons Section */}
+        {rejectionReasons.length > 0 && (
+          <Collapsible open={showReasons} onOpenChange={setShowReasons} className="mb-4">
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" className="w-full justify-between p-2 h-auto bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg">
+                <span className="flex items-center gap-2 text-red-700 text-sm font-medium">
+                  <MessageSquare className="w-4 h-4" />
+                  {rejectionReasons.length} motivo{rejectionReasons.length > 1 ? "s" : ""} de rejeição
+                </span>
+                <ChevronDown className={`w-4 h-4 text-red-600 transition-transform ${showReasons ? "rotate-180" : ""}`} />
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-2 space-y-2">
+              {rejectionReasons.map((reason, idx) => (
+                <div key={idx} className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-red-800 text-sm">{reason.user_name}</span>
+                    {reason.created_at && (
+                      <span className="text-xs text-red-500">
+                        {format(parseISO(reason.created_at), "dd/MM 'às' HH:mm", { locale: ptBR })}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-red-700">{reason.reason}</p>
+                </div>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
+
         {/* Vote Buttons */}
         {approval.status === "pending" && (
           <>
@@ -291,7 +321,7 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, currentUserId
                 <Button
                   variant={hasVotedAgainst ? "default" : "outline"}
                   className={`flex-1 ${hasVotedAgainst ? "bg-red-600 hover:bg-red-700" : ""}`}
-                  onClick={() => onVote(approval.approval_id, "against")}
+                  onClick={() => onReject(approval.approval_id)}
                   disabled={hasVotedAgainst}
                   data-testid={`vote-against-${approval.approval_id}`}
                 >
