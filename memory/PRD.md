@@ -65,6 +65,7 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 - [x] Admin: Estornar voto individual
 - [x] Admin: Reiniciar votação
 - [x] Admin: Excluir aprovação
+- [x] Motivo obrigatório para rejeição com histórico
 
 ### Sistema Multi-Entidade
 - [x] Campo entity_id em todos os modelos
