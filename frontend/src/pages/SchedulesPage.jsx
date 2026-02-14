@@ -784,16 +784,211 @@ export default function SchedulesPage() {
           </TabsTrigger>
           <TabsTrigger value="class" data-testid="tab-class">
             <GraduationCap className="w-4 h-4 mr-2" />
-            Escalas de Aulas
+            Aulas
           </TabsTrigger>
           <TabsTrigger value="content" data-testid="tab-content">
             <Instagram className="w-4 h-4 mr-2" />
-            Escalas de Postagens
+            Postagens
+          </TabsTrigger>
+          <TabsTrigger value="responsibilities" data-testid="tab-responsibilities">
+            <ClipboardList className="w-4 h-4 mr-2" />
+            Responsabilidades
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* Main Content */}
+      {/* Main Content - Schedules or Responsibilities */}
+      {activeTab === "responsibilities" ? (
+        // ============== RESPONSIBILITIES TAB ==============
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-outfit text-xl font-semibold">Funções Delegadas</h2>
+              <p className="text-sm text-muted-foreground">
+                Responsabilidades fixas atribuídas aos membros da equipe
+              </p>
+            </div>
+            <Dialog open={isRespDialogOpen} onOpenChange={(open) => {
+              setIsRespDialogOpen(open);
+              if (!open) resetRespForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button data-testid="create-responsibility-btn">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nova Responsabilidade
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="font-outfit">
+                    {editingResponsibility ? "Editar Responsabilidade" : "Nova Responsabilidade"}
+                  </DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Título *</Label>
+                    <Input
+                      placeholder="Ex: Artes de aniversariantes do mês"
+                      value={respFormData.title}
+                      onChange={(e) => setRespFormData({ ...respFormData, title: e.target.value })}
+                      data-testid="resp-title-input"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Descrição *</Label>
+                    <Textarea
+                      placeholder="Descreva a responsabilidade em detalhes..."
+                      value={respFormData.description}
+                      onChange={(e) => setRespFormData({ ...respFormData, description: e.target.value })}
+                      data-testid="resp-description-input"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Categoria</Label>
+                      <Select
+                        value={respFormData.category}
+                        onValueChange={(value) => setRespFormData({ ...respFormData, category: value })}
+                      >
+                        <SelectTrigger data-testid="resp-category-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="social_media">Redes Sociais</SelectItem>
+                          <SelectItem value="art">Arte/Design</SelectItem>
+                          <SelectItem value="production">Produção</SelectItem>
+                          <SelectItem value="content">Conteúdo</SelectItem>
+                          <SelectItem value="admin">Administrativo</SelectItem>
+                          <SelectItem value="other">Outros</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Prioridade</Label>
+                      <Select
+                        value={respFormData.priority}
+                        onValueChange={(value) => setRespFormData({ ...respFormData, priority: value })}
+                      >
+                        <SelectTrigger data-testid="resp-priority-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Baixa</SelectItem>
+                          <SelectItem value="medium">Média</SelectItem>
+                          <SelectItem value="high">Alta</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Responsável *</Label>
+                    <Select
+                      value={respFormData.assigned_to}
+                      onValueChange={(value) => setRespFormData({ ...respFormData, assigned_to: value })}
+                    >
+                      <SelectTrigger data-testid="resp-member-select">
+                        <SelectValue placeholder="Selecione um membro..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {members.map((member) => (
+                          <SelectItem key={member.member_id} value={member.member_id}>
+                            <div className="flex items-center gap-2">
+                              <Avatar className="w-5 h-5">
+                                <AvatarImage src={member.picture} />
+                                <AvatarFallback className="text-xs">{member.name?.charAt(0)}</AvatarFallback>
+                              </Avatar>
+                              {member.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Frequência</Label>
+                    <Select
+                      value={respFormData.frequency}
+                      onValueChange={(value) => setRespFormData({ ...respFormData, frequency: value })}
+                    >
+                      <SelectTrigger data-testid="resp-frequency-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="always">Sempre (contínuo)</SelectItem>
+                        <SelectItem value="weekly">Semanal</SelectItem>
+                        <SelectItem value="monthly">Mensal</SelectItem>
+                        <SelectItem value="as_needed">Sob Demanda</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Observações</Label>
+                    <Textarea
+                      placeholder="Notas adicionais sobre a responsabilidade..."
+                      value={respFormData.notes}
+                      onChange={(e) => setRespFormData({ ...respFormData, notes: e.target.value })}
+                      data-testid="resp-notes-input"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline">Cancelar</Button>
+                  </DialogClose>
+                  <Button onClick={handleCreateResponsibility} data-testid="save-responsibility-btn">
+                    {editingResponsibility ? "Salvar" : "Criar"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+
+          {/* Responsibilities List */}
+          {responsibilities.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Nenhuma responsabilidade cadastrada</p>
+                <p className="text-sm mt-1">Clique em "Nova Responsabilidade" para adicionar</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {responsibilities.map((resp) => (
+                <ResponsibilityCard
+                  key={resp.responsibility_id}
+                  responsibility={resp}
+                  members={members}
+                  onEdit={handleEditResponsibility}
+                  onDelete={handleDeleteResponsibility}
+                  onToggle={handleToggleResponsibility}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Stats */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex flex-wrap gap-4 justify-center text-sm text-muted-foreground">
+                <span>Total: <strong className="text-foreground">{responsibilities.length}</strong></span>
+                <span>•</span>
+                <span>Ativas: <strong className="text-green-600">{responsibilities.filter(r => r.active).length}</strong></span>
+                <span>•</span>
+                <span>Inativas: <strong className="text-amber-600">{responsibilities.filter(r => !r.active).length}</strong></span>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
+        // ============== SCHEDULES TAB ==============
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Calendar */}
         <Card className="lg:col-span-1" data-testid="schedule-calendar">
