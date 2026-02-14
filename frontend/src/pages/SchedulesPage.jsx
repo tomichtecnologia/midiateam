@@ -1158,7 +1158,9 @@ export default function SchedulesPage() {
                   schedule={schedule}
                   members={members}
                   onConfirm={handleConfirmAttendance}
+                  onDelete={handleDeleteClick}
                   currentUserMemberId={currentUserMember?.member_id}
+                  isAdmin={isAdmin}
                 />
               ))}
             </div>
@@ -1166,6 +1168,40 @@ export default function SchedulesPage() {
         </div>
       </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => !open && setDeleteDialog({ ...deleteDialog, open: false })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteDialog.deleteAll ? (
+                <>
+                  Você está prestes a excluir <strong>"{deleteDialog.scheduleName}"</strong> e <strong>todas as suas ocorrências recorrentes</strong>.
+                  <br /><br />
+                  Esta ação não pode ser desfeita.
+                </>
+              ) : (
+                <>
+                  Você está prestes a excluir <strong>"{deleteDialog.scheduleName}"</strong>.
+                  <br /><br />
+                  Esta ação não pode ser desfeita.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteSchedule}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              data-testid="confirm-delete-schedule"
+            >
+              {deleteDialog.deleteAll ? "Excluir Todas" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
