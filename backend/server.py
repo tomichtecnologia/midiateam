@@ -537,7 +537,8 @@ async def login_user(data: LoginRequest, response: Response):
 @api_router.get("/auth/pending-registrations")
 async def get_pending_registrations(user: User = Depends(get_current_user)):
     """Listar cadastros pendentes (apenas admin)"""
-    await check_admin(user)
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
     
     registrations = await db.pending_registrations.find(
         {"status": "pending"},
@@ -549,9 +550,8 @@ async def get_pending_registrations(user: User = Depends(get_current_user)):
 @api_router.post("/auth/approve-registration/{registration_id}")
 async def approve_registration(registration_id: str, user: User = Depends(get_current_user)):
     """Aprovar cadastro (apenas admin)"""
-    await check_admin(user)
-    
     entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
     
     registration = await db.pending_registrations.find_one(
         {"registration_id": registration_id, "status": "pending"},
@@ -602,7 +602,8 @@ async def approve_registration(registration_id: str, user: User = Depends(get_cu
 @api_router.post("/auth/reject-registration/{registration_id}")
 async def reject_registration(registration_id: str, user: User = Depends(get_current_user)):
     """Rejeitar cadastro (apenas admin)"""
-    await check_admin(user)
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
     
     result = await db.pending_registrations.update_one(
         {"registration_id": registration_id, "status": "pending"},
