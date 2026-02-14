@@ -422,6 +422,7 @@ export default function SchedulesPage() {
 
       const userMember = membersRes.data.find(m => m.user_id === userRes.data.user_id);
       setCurrentUserMember(userMember);
+      setIsAdmin(userRes.data.is_admin || userMember?.is_admin || false);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
