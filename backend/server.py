@@ -140,6 +140,19 @@ class RejectionReason(BaseModel):
     reason: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class CreatorResponse(BaseModel):
+    response: str
+    created_at: str
+
+class RevisionHistory(BaseModel):
+    revision_number: int
+    status: str  # approved, rejected
+    votes_for: List[str]
+    votes_against: List[str]
+    rejection_reasons: List[dict]
+    creator_response: Optional[str] = None
+    closed_at: str
+
 class ContentApproval(BaseModel):
     model_config = ConfigDict(extra="ignore")
     approval_id: str = Field(default_factory=lambda: f"approval_{uuid.uuid4().hex[:12]}")
@@ -153,6 +166,9 @@ class ContentApproval(BaseModel):
     votes_for: List[str] = []
     votes_against: List[str] = []
     rejection_reasons: List[dict] = []  # Lista de motivos de rejeição
+    creator_response: Optional[str] = None  # Resposta do criador aos motivos
+    revision_count: int = 1  # Número da revisão atual
+    revision_history: List[dict] = []  # Histórico de revisões anteriores
     status: str = "pending"
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -162,6 +178,9 @@ class ContentApprovalCreate(BaseModel):
     content_type: str
     content_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
+
+class CreatorResponseRequest(BaseModel):
+    response: str
 
 class Vote(BaseModel):
     approval_id: str
