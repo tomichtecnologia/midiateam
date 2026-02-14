@@ -154,12 +154,12 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 - [x] Cadastro com aprovação de admin
 - [x] Branding "Mídia Team"
 - [x] Rodapé "Tomich Tecnologia"
+- [x] **NOVO** Exclusão de escalas pelo admin (individual ou recorrentes)
 
 ### P1 (Alta Prioridade)
 - [ ] Integração completa Google Calendar (criar eventos)
 - [ ] Notificações WhatsApp via Twilio
 - [ ] Upload de imagens para membros
-- [ ] Exclusão de escalas pelo admin (individual ou recorrentes)
 
 ### P2 (Média Prioridade)
 - [ ] Relatórios de crescimento
