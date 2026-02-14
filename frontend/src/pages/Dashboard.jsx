@@ -343,30 +343,143 @@ export default function Dashboard() {
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // New states for my schedules and swaps
+  const [mySchedules, setMySchedules] = useState([]);
+  const [swapRequests, setSwapRequests] = useState([]);
+  const [currentMember, setCurrentMember] = useState(null);
+  
+  // Swap dialog state
+  const [swapDialogOpen, setSwapDialogOpen] = useState(false);
+  const [selectedScheduleForSwap, setSelectedScheduleForSwap] = useState(null);
+  const [swapReason, setSwapReason] = useState("");
+  const [swapTargetMember, setSwapTargetMember] = useState("");
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const [statsRes, schedulesRes, approvalsRes, membersRes] = await Promise.all([
-          axios.get(`${API}/dashboard/stats`, { withCredentials: true }),
-          axios.get(`${API}/dashboard/upcoming`, { withCredentials: true }),
-          axios.get(`${API}/dashboard/pending-approvals`, { withCredentials: true }),
-          axios.get(`${API}/members`, { withCredentials: true })
-        ]);
-
-        setStats(statsRes.data);
-        setUpcomingSchedules(schedulesRes.data);
-        setPendingApprovals(approvalsRes.data);
-        setMembers(membersRes.data);
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchDashboardData();
   }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      const [statsRes, schedulesRes, approvalsRes, membersRes, mySchedulesRes, swapRes, userRes] = await Promise.all([
+        axios.get(`${API}/dashboard/stats`, { withCredentials: true }),
+        axios.get(`${API}/dashboard/upcoming`, { withCredentials: true }),
+        axios.get(`${API}/dashboard/pending-approvals`, { withCredentials: true }),
+        axios.get(`${API}/members`, { withCredentials: true }),
+        axios.get(`${API}/my-schedules`, { withCredentials: true }),
+        axios.get(`${API}/schedules/swap-requests?status=pending`, { withCredentials: true }),
+        axios.get(`${API}/auth/me`, { withCredentials: true })
+      ]);
+
+      setStats(statsRes.data);
+      setUpcomingSchedules(schedulesRes.data);
+      setPendingApprovals(approvalsRes.data);
+      setMembers(membersRes.data);
+      setMySchedules(mySchedulesRes.data);
+      setSwapRequests(swapRes.data);
+      
+      // Find current member
+      const member = membersRes.data.find(m => m.user_id === userRes.data.user_id);
+      setCurrentMember(member);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleConfirmAttendance = async (scheduleId, memberId) => {
+    try {
+      await axios.post(
+        `${API}/schedules/${scheduleId}/attendance`,
+        { schedule_id: scheduleId, member_id: memberId, status: "confirmed" },
+        { withCredentials: true }
+      );
+      toast.success("Presença confirmada!");
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error confirming:", error);
+      toast.error("Erro ao confirmar presença");
+    }
+  };
+
+  const handleDeclineAttendance = async (scheduleId, memberId) => {
+    try {
+      await axios.post(
+        `${API}/schedules/${scheduleId}/attendance`,
+        { schedule_id: scheduleId, member_id: memberId, status: "declined" },
+        { withCredentials: true }
+      );
+      toast.success("Resposta registrada");
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error declining:", error);
+      toast.error("Erro ao registrar resposta");
+    }
+  };
+
+  const handleOpenSwapDialog = (schedule) => {
+    setSelectedScheduleForSwap(schedule);
+    setSwapReason("");
+    setSwapTargetMember("");
+    setSwapDialogOpen(true);
+  };
+
+  const handleCreateSwapRequest = async () => {
+    if (!swapReason.trim()) {
+      toast.error("Informe o motivo da troca");
+      return;
+    }
+    
+    try {
+      await axios.post(
+        `${API}/schedules/swap-request`,
+        {
+          schedule_id: selectedScheduleForSwap.schedule_id,
+          target_member_id: swapTargetMember || null,
+          reason: swapReason.trim()
+        },
+        { withCredentials: true }
+      );
+      toast.success("Solicitação de troca enviada! Aguarde alguém aceitar.");
+      setSwapDialogOpen(false);
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error creating swap:", error);
+      toast.error(error.response?.data?.detail || "Erro ao solicitar troca");
+    }
+  };
+
+  const handleAcceptSwap = async (swapId) => {
+    try {
+      await axios.post(
+        `${API}/schedules/swap-requests/${swapId}/respond`,
+        { swap_id: swapId, accept: true },
+        { withCredentials: true }
+      );
+      toast.success("Troca aceita! Você foi adicionado à escala.");
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error accepting swap:", error);
+      toast.error(error.response?.data?.detail || "Erro ao aceitar troca");
+    }
+  };
+
+  const handleCancelSwap = async (swapId) => {
+    try {
+      await axios.delete(`${API}/schedules/swap-requests/${swapId}`, { withCredentials: true });
+      toast.success("Solicitação cancelada");
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error cancelling swap:", error);
+      toast.error("Erro ao cancelar");
+    }
+  };
+
+  // Filter swap requests - show those I can accept or my own pending
+  const relevantSwapRequests = swapRequests.filter(r => 
+    r.can_accept || (r.is_mine && r.status === "pending")
+  );
 
   if (loading) {
     return (
