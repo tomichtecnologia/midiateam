@@ -438,6 +438,94 @@ export default function SchedulesPage() {
     }
   };
 
+  // ============== RESPONSIBILITY FUNCTIONS ==============
+
+  const resetRespForm = () => {
+    setRespFormData({
+      title: "",
+      description: "",
+      category: "other",
+      assigned_to: "",
+      priority: "medium",
+      frequency: "always",
+      notes: ""
+    });
+    setEditingResponsibility(null);
+  };
+
+  const handleCreateResponsibility = async () => {
+    try {
+      if (!respFormData.title || !respFormData.assigned_to) {
+        toast.error("Preencha título e responsável");
+        return;
+      }
+
+      if (editingResponsibility) {
+        await axios.put(
+          `${API}/responsibilities/${editingResponsibility.responsibility_id}`,
+          respFormData,
+          { withCredentials: true }
+        );
+        toast.success("Responsabilidade atualizada!");
+      } else {
+        await axios.post(`${API}/responsibilities`, respFormData, { withCredentials: true });
+        toast.success("Responsabilidade criada!");
+      }
+      
+      setIsRespDialogOpen(false);
+      resetRespForm();
+      fetchData();
+    } catch (error) {
+      console.error("Error saving responsibility:", error);
+      toast.error("Erro ao salvar responsabilidade");
+    }
+  };
+
+  const handleEditResponsibility = (responsibility) => {
+    setEditingResponsibility(responsibility);
+    setRespFormData({
+      title: responsibility.title,
+      description: responsibility.description,
+      category: responsibility.category,
+      assigned_to: responsibility.assigned_to,
+      priority: responsibility.priority,
+      frequency: responsibility.frequency,
+      notes: responsibility.notes || ""
+    });
+    setIsRespDialogOpen(true);
+  };
+
+  const handleToggleResponsibility = async (responsibilityId) => {
+    try {
+      await axios.patch(
+        `${API}/responsibilities/${responsibilityId}/toggle`,
+        {},
+        { withCredentials: true }
+      );
+      toast.success("Status alterado!");
+      fetchData();
+    } catch (error) {
+      console.error("Error toggling responsibility:", error);
+      toast.error("Erro ao alterar status");
+    }
+  };
+
+  const handleDeleteResponsibility = async (responsibilityId) => {
+    if (!window.confirm("Tem certeza que deseja excluir esta responsabilidade?")) return;
+    
+    try {
+      await axios.delete(
+        `${API}/responsibilities/${responsibilityId}`,
+        { withCredentials: true }
+      );
+      toast.success("Responsabilidade excluída!");
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting responsibility:", error);
+      toast.error("Erro ao excluir");
+    }
+  };
+
   const filteredSchedules = schedules.filter((schedule) => {
     if (activeTab === "class") return schedule.schedule_type === "class";
     if (activeTab === "content") return schedule.schedule_type === "content";
