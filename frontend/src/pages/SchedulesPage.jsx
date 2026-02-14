@@ -191,6 +191,107 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, currentUserMemberId 
   );
 };
 
+// ============== RESPONSIBILITY CARD ==============
+
+const categoryLabels = {
+  social_media: { label: "Redes Sociais", color: "bg-pink-100 text-pink-700" },
+  art: { label: "Arte/Design", color: "bg-purple-100 text-purple-700" },
+  production: { label: "Produção", color: "bg-blue-100 text-blue-700" },
+  content: { label: "Conteúdo", color: "bg-green-100 text-green-700" },
+  admin: { label: "Administrativo", color: "bg-amber-100 text-amber-700" },
+  other: { label: "Outros", color: "bg-gray-100 text-gray-700" }
+};
+
+const frequencyLabels = {
+  always: "Sempre",
+  weekly: "Semanal",
+  monthly: "Mensal",
+  as_needed: "Sob Demanda"
+};
+
+const priorityLabels = {
+  low: { label: "Baixa", color: "text-green-600" },
+  medium: { label: "Média", color: "text-amber-600" },
+  high: { label: "Alta", color: "text-red-600" }
+};
+
+const ResponsibilityCard = ({ responsibility, members, onEdit, onDelete, onToggle }) => {
+  const member = members.find(m => m.member_id === responsibility.assigned_to);
+  const category = categoryLabels[responsibility.category] || categoryLabels.other;
+  const priority = priorityLabels[responsibility.priority] || priorityLabels.medium;
+
+  return (
+    <Card className={`card-hover group ${!responsibility.active ? "opacity-60" : ""}`} data-testid={`responsibility-card-${responsibility.responsibility_id}`}>
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <Badge className={category.color}>{category.label}</Badge>
+              <Badge variant="outline" className={priority.color}>
+                {priority.label}
+              </Badge>
+              {!responsibility.active && (
+                <Badge variant="secondary">Inativo</Badge>
+              )}
+            </div>
+            
+            <h3 className="font-semibold text-lg">{responsibility.title}</h3>
+            <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+              {responsibility.description}
+            </p>
+
+            <div className="flex items-center gap-4 mt-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Avatar className="w-6 h-6">
+                  <AvatarImage src={member?.picture} />
+                  <AvatarFallback className="text-xs">{member?.name?.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <span className="font-medium">{member?.name || "Não atribuído"}</span>
+              </div>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">{frequencyLabels[responsibility.frequency]}</span>
+            </div>
+
+            {responsibility.notes && (
+              <p className="text-xs text-muted-foreground mt-2 italic">
+                "{responsibility.notes}"
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onEdit(responsibility)}
+              data-testid={`edit-responsibility-${responsibility.responsibility_id}`}
+            >
+              <Edit2 className="w-4 h-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onToggle(responsibility.responsibility_id)}
+              data-testid={`toggle-responsibility-${responsibility.responsibility_id}`}
+            >
+              {responsibility.active ? <XCircle className="w-4 h-4 text-amber-500" /> : <CheckCircle className="w-4 h-4 text-green-500" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="text-destructive hover:text-destructive"
+              onClick={() => onDelete(responsibility.responsibility_id)}
+              data-testid={`delete-responsibility-${responsibility.responsibility_id}`}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState([]);
   const [members, setMembers] = useState([]);
