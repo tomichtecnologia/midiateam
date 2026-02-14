@@ -42,12 +42,19 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await axios.post(`${API}/auth/register`, {
+      const response = await axios.post(`${API}/auth/register`, {
         name: formData.name,
         email: formData.email,
         phone: formData.phone || null,
         password: formData.password,
       });
+
+      // Se foi auto-aprovado (primeiro usuário), redireciona para login
+      if (response.data.auto_approved) {
+        toast.success("Conta de administrador criada! Faça login para continuar.");
+        navigate("/login");
+        return;
+      }
 
       setSuccess(true);
       toast.success("Cadastro enviado com sucesso!");
