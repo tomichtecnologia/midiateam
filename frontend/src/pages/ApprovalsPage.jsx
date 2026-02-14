@@ -832,6 +832,8 @@ export default function ApprovalsPage() {
               onVote={handleVote}
               onReject={handleOpenRejectDialog}
               onAdminAction={handleAdminAction}
+              onRespond={handleCreatorRespond}
+              onRequestReevaluation={handleRequestReevaluation}
               currentUserId={currentUser?.user_id}
               totalVoters={votingStats.total_voters}
               canVote={votingStats.can_vote}
