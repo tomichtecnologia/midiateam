@@ -346,14 +346,16 @@ export default function SchedulesPage() {
 
   const fetchData = async () => {
     try {
-      const [schedulesRes, membersRes, userRes] = await Promise.all([
+      const [schedulesRes, membersRes, userRes, respRes] = await Promise.all([
         axios.get(`${API}/schedules`, { withCredentials: true }),
         axios.get(`${API}/members`, { withCredentials: true }),
-        axios.get(`${API}/auth/me`, { withCredentials: true })
+        axios.get(`${API}/auth/me`, { withCredentials: true }),
+        axios.get(`${API}/responsibilities?active_only=false`, { withCredentials: true })
       ]);
 
       setSchedules(schedulesRes.data);
       setMembers(membersRes.data);
+      setResponsibilities(respRes.data);
 
       const userMember = membersRes.data.find(m => m.user_id === userRes.data.user_id);
       setCurrentUserMember(userMember);
