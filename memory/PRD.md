@@ -1,4 +1,4 @@
-# Tomich Gestão de Mídia - PRD (Product Requirements Document)
+# Mídia Team - PRD (Product Requirements Document)
 
 ## Problema Original
 Sistema de gerenciamento de mídia para igreja, incluindo:
@@ -21,6 +21,7 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 - Adiciona membros e recursos
 - Gerencia permissões de votação
 - Pode estornar votos e excluir aprovações
+- **NOVO**: Aprova cadastros de novos usuários
 
 ### Membro da Equipe
 - Confirma presença nas escalas
@@ -34,10 +35,20 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 
 ## Core Requirements
 
-### Autenticação
-- [x] Login via Google (Emergent Google Auth)
+### Autenticação (ATUALIZADO - Fev 2026)
+- [x] ~~Login via Google (Emergent Google Auth)~~ REMOVIDO
+- [x] **NOVO**: Cadastro com email/senha (aguarda aprovação do admin)
+- [x] **NOVO**: Primeiro usuário é auto-aprovado como admin
+- [x] **NOVO**: Login via email e senha
+- [x] **NOVO**: Recuperação de senha ("Esqueci minha senha")
+- [x] **NOVO**: Admin pode aprovar/rejeitar cadastros pendentes
 - [x] Sessões persistentes (7 dias)
 - [x] Proteção de rotas
+
+### Branding (NOVO - Fev 2026)
+- [x] Nome alterado para "Mídia Team"
+- [x] Rodapé "Desenvolvido por Tomich Tecnologia"
+- [x] Logotipo com ícone Play
 
 ### Gestão de Escalas
 - [x] Criação de escalas (aulas e conteúdo)
@@ -61,6 +72,7 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 - [x] Funções (operador, editor, câmera, som, social media)
 - [x] Permissão is_admin
 - [x] Permissão can_vote
+- [x] **NOVO**: Seção de cadastros pendentes (admin)
 
 ### Aprovação de Conteúdo
 - [x] Sistema de votação
@@ -107,23 +119,21 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 
 ## What's Been Implemented
 
+### Fevereiro 2026 - Sistema de Autenticação Personalizado
+- **Remoção do Google Auth**: Login com Google completamente removido
+- **Cadastro com Aprovação**: Novos usuários preenchem nome, email, telefone, senha
+- **Auto-aprovação do Primeiro Usuário**: Primeiro cadastro vira admin automaticamente
+- **Fluxo de Aprovação**: Admin vê "Cadastros Pendentes" na página de Membros
+- **Login Email/Senha**: Formulário de login modernizado
+- **Recuperação de Senha**: Fluxo de "Esqueci minha senha" com token
+- **Branding Mídia Team**: Nome alterado em toda a aplicação
+- **Rodapé Tomich Tecnologia**: Adicionado no sidebar
+- **Testes**: 100% de sucesso em backend (19/19) e frontend
+
 ### Fevereiro 2026 - Multi-Entidade e Admin
-- **Sistema Multi-Entidade completo**:
-  - Campo entity_id em membros, escalas, aprovações, links
-  - Isolamento de dados por entidade
-  - Endpoints para gerenciar entidades
-  - Troca de entidade ativa
-
-- **Controles de Administrador**:
-  - Permissão is_admin em membros
-  - Permissão can_vote para votação
-  - Estornar voto individual de aprovação
-  - Reiniciar toda a votação
-  - Excluir aprovação
-  - UI com menu dropdown para admin
-  - Badges visuais (Admin, Pode Votar, Modo Admin)
-
-- **Testes**: 100% de sucesso em backend e frontend
+- Sistema Multi-Entidade completo
+- Controles de Administrador (estornar votos, excluir aprovações)
+- Testes: 100% de sucesso
 
 ### Janeiro 2026 - Gamificação
 - Sistema de pontos por interação
@@ -139,19 +149,17 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 
 ## Prioritized Backlog
 
-### P0 (Crítico) - CONCLUÍDO
-- [x] Autenticação Google
-- [x] CRUD de escalas
-- [x] Confirmação de presença
-- [x] Dashboard básico
-- [x] Sistema Multi-Entidade
-- [x] Controles de Admin
+### P0 (Crítico) - ✅ CONCLUÍDO
+- [x] Autenticação personalizada (email/senha)
+- [x] Cadastro com aprovação de admin
+- [x] Branding "Mídia Team"
+- [x] Rodapé "Tomich Tecnologia"
 
 ### P1 (Alta Prioridade)
 - [ ] Integração completa Google Calendar (criar eventos)
 - [ ] Notificações WhatsApp via Twilio
 - [ ] Upload de imagens para membros
-- [ ] Sistema de substituição melhorado
+- [ ] Exclusão de escalas pelo admin (individual ou recorrentes)
 
 ### P2 (Média Prioridade)
 - [ ] Relatórios de crescimento
@@ -166,24 +174,33 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 
 ## Next Action Items
 
-1. **Integração Google Calendar**: Adicionar criação automática de eventos
-2. **Notificações WhatsApp**: Configurar Twilio para lembretes
-3. **Upload de Fotos**: Implementar upload de imagens para perfil
-4. **Sistema de Substituição**: Melhorar fluxo de indicação de substituto
+1. **Exclusão de Escalas**: Implementar DELETE /api/schedules/{id} com opção delete_recurring
+2. **Integração Google Calendar**: Adicionar criação automática de eventos
+3. **Notificações WhatsApp**: Configurar Twilio para lembretes
+4. **Upload de Fotos**: Implementar upload de imagens para perfil
 
 ## Arquitetura Técnica
 
 ```
 /app/
 ├── backend/
-│   ├── server.py        # FastAPI monólito
+│   ├── server.py        # FastAPI monólito (precisa refatoração)
 │   ├── .env             # MONGO_URL, EMERGENT_LLM_KEY
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── App.js
-│   │   ├── pages/       # Dashboard, Members, Schedules, Approvals, etc.
-│   │   └── components/  # Shadcn UI components
+│   │   ├── App.js           # Rotas públicas e privadas
+│   │   ├── pages/
+│   │   │   ├── HomePage.jsx        # NOVO - Página pública
+│   │   │   ├── LoginPage.jsx       # ATUALIZADO - Email/senha
+│   │   │   ├── RegisterPage.jsx    # NOVO - Cadastro
+│   │   │   ├── ForgotPasswordPage.jsx  # NOVO
+│   │   │   ├── ResetPasswordPage.jsx   # NOVO
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── MembersPage.jsx     # ATUALIZADO - Cadastros pendentes
+│   │   │   └── ...
+│   │   └── components/
+│   │       └── SidebarLayout.jsx   # ATUALIZADO - Branding
 │   └── .env             # REACT_APP_BACKEND_URL
 └── memory/
     └── PRD.md
@@ -191,5 +208,9 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 
 ## Notes
 - Sistema utiliza Emergent LLM Key para IA
-- Autenticação via Emergent Google Auth
+- **Autenticação via JWT personalizado (Google Auth removido)**
 - Design com tema vermelho/branco
+- Primeiro usuário sempre é admin
+
+## Credenciais de Teste
+- **Admin**: admin@teste.com / senha123
