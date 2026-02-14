@@ -355,6 +355,15 @@ export default function SchedulesPage() {
   const [activeTab, setActiveTab] = useState("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUserMember, setCurrentUserMember] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  
+  // Delete confirmation dialog state
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    scheduleId: null,
+    deleteAll: false,
+    scheduleName: ""
+  });
   
   // Responsibilities state
   const [isRespDialogOpen, setIsRespDialogOpen] = useState(false);
