@@ -412,10 +412,18 @@ async def get_current_user(request: Request) -> User:
     if expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Session expired")
     
-    user = await db.users.find_one(
+    # Primeiro tenta buscar em registered_users (novo sistema de auth)
+    user = await db.registered_users.find_one(
         {"user_id": session["user_id"]},
         {"_id": 0}
     )
+    
+    # Se não encontrar, busca em users (legado/Google Auth)
+    if not user:
+        user = await db.users.find_one(
+            {"user_id": session["user_id"]},
+            {"_id": 0}
+        )
     
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
