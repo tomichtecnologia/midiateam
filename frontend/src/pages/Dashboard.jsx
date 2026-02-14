@@ -328,14 +328,6 @@ const SwapRequestCard = ({ request, onAccept, onCancel }) => {
     </Card>
   );
 };
-              </span>
-            </div>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-};
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
