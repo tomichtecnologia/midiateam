@@ -1,0 +1,109 @@
+{
+  "summary": "Tested Schedule Swap/Substitution Feature for Tomich Gestão de Mídia. All backend APIs (14/14 tests passed) and frontend UI flows working correctly. Full swap workflow tested: create request → view by other user → accept → schedule updated.",
+
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Swap Dialog",
+        "issues": ["Console warning: Missing Description or aria-describedby for DialogContent - accessibility improvement recommended"]
+      }
+    ]
+  },
+
+  "passed_tests": [
+    "BACKEND: GET /api/my-schedules - returns schedules for current user",
+    "BACKEND: GET /api/schedules/swap-requests - returns pending swap requests with enriched data",
+    "BACKEND: POST /api/schedules/swap-request - creates swap request successfully",
+    "BACKEND: POST /api/schedules/swap-request - creates swap request with specific target member",
+    "BACKEND: POST /api/schedules/swap-request - returns 404 for invalid schedule",
+    "BACKEND: POST /api/schedules/swap-request - returns 400 for duplicate pending request",
+    "BACKEND: GET /api/schedules/my-swap-requests - returns user's own swap requests",
+    "BACKEND: DELETE /api/schedules/swap-requests/{id} - cancels own swap request",
+    "BACKEND: DELETE /api/schedules/swap-requests/{id} - returns 404 for nonexistent request",
+    "BACKEND: POST /api/schedules/swap-requests/{id}/respond - returns 400 when responding to own request",
+    "BACKEND: POST /api/schedules/swap-requests/{id}/respond - returns 404 for invalid swap_id",
+    "BACKEND: POST /api/schedules/swap-requests/{id}/respond - accepts swap and updates schedule correctly",
+    "BACKEND: POST /api/schedules/{id}/attendance - confirms attendance",
+    "BACKEND: POST /api/schedules/{id}/attendance - declines attendance",
+    "FRONTEND: Dashboard shows 'Minhas Escalas' section with user's schedules",
+    "FRONTEND: Schedule cards show HOJE badge (red) for today's schedules",
+    "FRONTEND: Schedule cards show AMANHÃ badge (orange) for tomorrow's schedules",
+    "FRONTEND: Schedule cards show Pendente badge (amber) for unconfirmed",
+    "FRONTEND: Schedule cards show Confirmado badge (green) for confirmed",
+    "FRONTEND: Schedule cards show 'Não vai' badge (red) for declined",
+    "FRONTEND: Confirmar button works - confirms attendance with success toast",
+    "FRONTEND: Não Posso button works - declines attendance",
+    "FRONTEND: Swap button opens modal dialog",
+    "FRONTEND: Swap modal shows schedule info (title, date, time)",
+    "FRONTEND: Swap modal has required reason textarea",
+    "FRONTEND: Swap modal has optional target member dropdown with all members",
+    "FRONTEND: Submit swap creates request with success toast",
+    "FRONTEND: 'Solicitações de Troca' section shows pending requests",
+    "FRONTEND: Swap request cards show requester name, schedule info, reason",
+    "FRONTEND: Cancel button removes own swap request",
+    "FRONTEND: 'Mudei de ideia - Vou!' button changes declined to confirmed",
+    "FRONTEND: 'Solicitar Troca' button appears on confirmed schedules"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_swap_schedules.py",
+    "/app/test_reports/pytest/swap_results.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [],
+
+  "updated_files": [
+    "/app/backend/tests/test_swap_schedules.py"
+  ],
+
+  "success_rate": {
+    "backend": "100% (14/14 pytest tests passed)",
+    "frontend": "100% (all UI flows tested and working)"
+  },
+
+  "test_credentials": {
+    "admin_session_token": "test_admin_session_1771021469",
+    "creator_session_token": "creator_test_session_123",
+    "admin_member_id": "member_1769375890031",
+    "danilo_member_id": "member_4ab0bc5c1510"
+  },
+
+  "seed_data_creation": "Created test swap requests during testing. One swap was accepted (Postagem no Instagram - now assigned to Danilo). Aula de Segunda also swapped to Danilo via previous test.",
+
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+
+  "context_for_next_testing_agent": "Schedule Swap/Substitution feature fully tested. Flow: User creates swap request (POST /api/schedules/swap-request) → Other users see request with can_accept=true (GET /api/schedules/swap-requests) → User accepts (POST /api/schedules/swap-requests/{id}/respond) → Schedule updated (assigned_members changed, substitutes record added). Cancel works via DELETE. UI shows 'Minhas Escalas' section on Dashboard with all action buttons working.",
+
+  "feature_test_summary": {
+    "my_schedules_section": "PASS - Shows user's assigned schedules with badges",
+    "badges": {
+      "HOJE_red": "PASS",
+      "AMANHA_orange": "PASS",
+      "Pendente_amber": "PASS",
+      "Confirmado_green": "PASS",
+      "Nao_vai_red": "PASS"
+    },
+    "confirm_button": "PASS - Confirms attendance, shows success toast",
+    "decline_button": "PASS - Declines attendance",
+    "swap_button": "PASS - Opens modal dialog",
+    "swap_modal": {
+      "reason_field": "PASS - Required textarea",
+      "target_member_select": "PASS - Dropdown with all members",
+      "submit_button": "PASS - Creates request"
+    },
+    "swap_requests_section": "PASS - Shows pending requests",
+    "cancel_swap": "PASS - Cancels own requests",
+    "accept_swap_api": "PASS - Updates schedule correctly",
+    "schedule_update_on_accept": "PASS - Removes requester, adds accepter, records in substitutes"
+  }
+}
