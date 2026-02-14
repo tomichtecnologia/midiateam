@@ -167,6 +167,176 @@ const ApprovalCard = ({ approval, totalMembers }) => {
   );
 };
 
+// ============== MY SCHEDULE CARD ==============
+const MyScheduleCard = ({ schedule, currentMemberId, onConfirm, onDecline, onRequestSwap }) => {
+  const isConfirmed = schedule.confirmed_members?.includes(currentMemberId);
+  const isDeclined = schedule.declined_members?.includes(currentMemberId);
+  const scheduleDate = parseISO(schedule.date);
+  const isSchedulePast = isPast(scheduleDate) && !isToday(scheduleDate);
+  const isScheduleToday = isToday(scheduleDate);
+  const isScheduleTomorrow = isTomorrow(scheduleDate);
+
+  const getStatusBadge = () => {
+    if (isConfirmed) return <Badge className="bg-green-100 text-green-700">Confirmado</Badge>;
+    if (isDeclined) return <Badge className="bg-red-100 text-red-700">Não vai</Badge>;
+    if (isSchedulePast) return <Badge variant="secondary">Passada</Badge>;
+    return <Badge className="bg-amber-100 text-amber-700">Pendente</Badge>;
+  };
+
+  const getDateBadge = () => {
+    if (isScheduleToday) return <Badge className="bg-red-500 text-white">HOJE</Badge>;
+    if (isScheduleTomorrow) return <Badge className="bg-orange-500 text-white">AMANHÃ</Badge>;
+    return null;
+  };
+
+  return (
+    <Card className={`card-hover ${isSchedulePast ? "opacity-60" : ""}`} data-testid={`my-schedule-${schedule.schedule_id}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              {getDateBadge()}
+              {getStatusBadge()}
+              <Badge variant={schedule.schedule_type === "class" ? "default" : "secondary"}>
+                {schedule.schedule_type === "class" ? "Aula" : "Conteúdo"}
+              </Badge>
+            </div>
+            <h4 className="font-semibold text-foreground">{schedule.title}</h4>
+            <p className="text-sm text-muted-foreground">
+              {format(scheduleDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+          <Clock className="w-4 h-4" />
+          <span>{schedule.start_time} - {schedule.end_time}</span>
+        </div>
+
+        {/* Action Buttons - Only show if not past and not already responded */}
+        {!isSchedulePast && !isConfirmed && !isDeclined && (
+          <div className="flex gap-2 mt-3">
+            <Button
+              size="sm"
+              className="flex-1 bg-green-600 hover:bg-green-700"
+              onClick={() => onConfirm(schedule.schedule_id, currentMemberId)}
+              data-testid={`confirm-btn-${schedule.schedule_id}`}
+            >
+              <CheckCircle className="w-4 h-4 mr-1" />
+              Confirmar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+              onClick={() => onDecline(schedule.schedule_id, currentMemberId)}
+              data-testid={`decline-btn-${schedule.schedule_id}`}
+            >
+              <XCircle className="w-4 h-4 mr-1" />
+              Não Posso
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => onRequestSwap(schedule)}
+              data-testid={`swap-btn-${schedule.schedule_id}`}
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
+        {/* Show change option if already confirmed */}
+        {!isSchedulePast && (isConfirmed || isDeclined) && (
+          <div className="flex gap-2 mt-3">
+            {isConfirmed && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-amber-600 hover:text-amber-700"
+                onClick={() => onRequestSwap(schedule)}
+                data-testid={`change-swap-${schedule.schedule_id}`}
+              >
+                <ArrowRightLeft className="w-4 h-4 mr-1" />
+                Solicitar Troca
+              </Button>
+            )}
+            {isDeclined && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-green-600 hover:text-green-700"
+                onClick={() => onConfirm(schedule.schedule_id, currentMemberId)}
+              >
+                <CheckCircle className="w-4 h-4 mr-1" />
+                Mudei de ideia - Vou!
+              </Button>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+// ============== SWAP REQUEST CARD ==============
+const SwapRequestCard = ({ request, onAccept, onCancel }) => {
+  return (
+    <Card className="border-amber-200 bg-amber-50" data-testid={`swap-request-${request.swap_id}`}>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <Avatar className="w-10 h-10">
+            <AvatarImage src={request.requester_picture} />
+            <AvatarFallback>{request.requester_name?.charAt(0)}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <p className="font-medium text-sm">{request.requester_name}</p>
+            <p className="text-xs text-muted-foreground">
+              precisa de alguém para {request.schedule_title}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {request.schedule_date && format(parseISO(request.schedule_date), "dd/MM - EEEE", { locale: ptBR })}
+            </p>
+            <p className="text-sm text-amber-700 mt-1 italic">"{request.reason}"</p>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-3">
+          {request.can_accept && (
+            <Button
+              size="sm"
+              className="flex-1 bg-green-600 hover:bg-green-700"
+              onClick={() => onAccept(request.swap_id)}
+              data-testid={`accept-swap-${request.swap_id}`}
+            >
+              <UserPlus className="w-4 h-4 mr-1" />
+              Eu vou!
+            </Button>
+          )}
+          {request.is_mine && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={() => onCancel(request.swap_id)}
+              data-testid={`cancel-swap-${request.swap_id}`}
+            >
+              Cancelar
+            </Button>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+              </span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [upcomingSchedules, setUpcomingSchedules] = useState([]);
