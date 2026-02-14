@@ -440,6 +440,26 @@ export default function ApprovalsPage() {
     }
   };
 
+  // Open rejection dialog
+  const handleOpenRejectDialog = (approvalId) => {
+    setRejectingApprovalId(approvalId);
+    setRejectionReason("");
+    setIsRejectDialogOpen(true);
+  };
+
+  // Submit rejection with reason
+  const handleSubmitRejection = async () => {
+    if (!rejectionReason.trim()) {
+      toast.error("Por favor, informe o motivo da rejeição");
+      return;
+    }
+    
+    await handleVote(rejectingApprovalId, "against", rejectionReason.trim());
+    setIsRejectDialogOpen(false);
+    setRejectingApprovalId(null);
+    setRejectionReason("");
+  };
+
   const handleAdminAction = async (approvalId, action, userId = null) => {
     try {
       if (action === "reset") {
