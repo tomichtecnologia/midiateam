@@ -1,0 +1,79 @@
+{
+  "summary": "Tested rejection reason feature for Tomich Gestão de Mídia. All backend API tests passed (8/8). Frontend UI tests all passed - modal opens on reject click, reason field works correctly, submit button disabled when empty, rejection reasons display correctly in Rejected tab.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Rejection Modal", "issues": ["Minor: React DevTools warning about missing DialogContent description - cosmetic only"]}
+    ]
+  },
+  
+  "passed_tests": [
+    "BACKEND: Vote against without reason returns 400 error",
+    "BACKEND: Vote against with reason returns 200 and saves rejection_reasons",
+    "BACKEND: Vote for (approval) does NOT require reason",
+    "BACKEND: Vote against with empty reason returns 400",
+    "BACKEND: Vote against with whitespace-only reason returns 400",
+    "BACKEND: Rejection reasons appear in GET /approvals response",
+    "BACKEND: Rejection reason has required fields (user_id, user_name, reason, created_at)",
+    "BACKEND: Multiple users can reject same approval with different reasons",
+    "FRONTEND: Clicking 'Rejeitar' opens rejection modal",
+    "FRONTEND: Modal has title 'Motivo da Rejeição'",
+    "FRONTEND: Modal has textarea for entering reason",
+    "FRONTEND: 'Confirmar Rejeição' button disabled when reason is empty",
+    "FRONTEND: Button enabled after typing reason",
+    "FRONTEND: Modal closes after successful rejection",
+    "FRONTEND: Success toast appears after rejection",
+    "FRONTEND: Rejected tab shows '1 motivo de rejeição' button on cards",
+    "FRONTEND: Clicking motivo button expands to show voter name, date/time, and reason",
+    "FRONTEND: Clicking 'Aprovar' does NOT open rejection modal"
+  ],
+  
+  "test_report_links": [
+    "/app/backend/tests/test_rejection_reason.py",
+    "/app/test_reports/pytest/rejection_reason_results.xml"
+  ],
+  
+  "action_items": [],
+  
+  "critical_code_review_comments": [],
+  
+  "updated_files": [
+    "/app/backend/tests/test_rejection_reason.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% (8/8 tests passed)",
+    "frontend": "100% (all features tested and working)"
+  },
+  
+  "test_credentials": {
+    "admin_session_token": "test_admin_session_1771021469",
+    "admin_user": "Usuário Teste (test.user@rhema.com)",
+    "regular_session_token": "test_regular_user_123"
+  },
+  
+  "seed_data_creation": "Created test approvals during testing for rejection reason flow validation",
+  
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  
+  "context_for_next_testing_agent": "Rejection reason feature fully tested and working. When clicking 'Rejeitar', modal opens with required reason field. API correctly validates that 'against' votes require non-empty reason. Rejection reasons display correctly in the Rejected tab with collapsible view showing voter name, timestamp, and reason text.",
+  
+  "feature_test_summary": {
+    "rejection_modal_opens_on_click": "PASS - Modal titled 'Motivo da Rejeição' opens when clicking 'Rejeitar'",
+    "modal_has_textarea": "PASS - Textarea with placeholder for rejection reason is present",
+    "submit_disabled_when_empty": "PASS - 'Confirmar Rejeição' button disabled until reason is typed",
+    "api_400_without_reason": "PASS - API returns 400 if voting against without reason",
+    "api_200_with_reason": "PASS - API accepts vote against with reason and saves to rejection_reasons",
+    "rejection_reasons_display": "PASS - Cards in Rejected tab show '1 motivo de rejeição' button",
+    "expanded_shows_details": "PASS - Expanded view shows voter name, date/time, and reason text",
+    "approval_no_reason_required": "PASS - Clicking 'Aprovar' votes immediately without modal"
+  }
+}
