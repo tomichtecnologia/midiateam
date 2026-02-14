@@ -23,7 +23,12 @@ import {
   Video,
   GraduationCap,
   Repeat,
-  Instagram
+  Instagram,
+  ClipboardList,
+  Edit2,
+  Trash2,
+  User,
+  AlertCircle
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
