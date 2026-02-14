@@ -183,6 +183,32 @@ class Link(BaseModel):
 
 class LinkCreate(BaseModel):
     title: str
+
+# ============== DELEGATED RESPONSIBILITIES ==============
+
+class DelegatedResponsibility(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    responsibility_id: str = Field(default_factory=lambda: f"resp_{uuid.uuid4().hex[:12]}")
+    entity_id: str
+    title: str
+    description: str
+    category: str  # social_media, art, production, content, admin, other
+    assigned_to: str  # member_id
+    priority: str = "medium"  # low, medium, high
+    frequency: str = "always"  # always, weekly, monthly, as_needed
+    active: bool = True
+    notes: Optional[str] = None
+    created_by: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class DelegatedResponsibilityCreate(BaseModel):
+    title: str
+    description: str
+    category: str
+    assigned_to: str
+    priority: str = "medium"
+    frequency: str = "always"
+    notes: Optional[str] = None
     url: str
     category: str
     username: Optional[str] = None
