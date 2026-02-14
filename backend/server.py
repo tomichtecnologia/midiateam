@@ -639,7 +639,8 @@ async def change_password(data: ChangePasswordRequest, user: User = Depends(get_
 @api_router.post("/auth/admin-change-password/{target_user_id}")
 async def admin_change_password(target_user_id: str, data: ChangePasswordRequest, user: User = Depends(get_current_user)):
     """Admin muda senha de outro usuário"""
-    await check_admin(user)
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
     
     result = await db.registered_users.update_one(
         {"user_id": target_user_id},
