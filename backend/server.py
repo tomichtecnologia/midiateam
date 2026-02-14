@@ -776,6 +776,221 @@ async def get_schedules(
     schedules = await db.schedules.find(query, {"_id": 0}).sort("date", 1).to_list(1000)
     return schedules
 
+# ============== SWAP ROUTES (must be before /schedules/{schedule_id}) ==============
+
+@api_router.post("/schedules/swap-request")
+async def create_swap_request(swap_data: SwapRequestCreate, user: User = Depends(get_current_user)):
+    """Criar solicitação de troca de escala"""
+    entity_id = await get_current_entity_id(user)
+    
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    
+    schedule = await db.schedules.find_one(
+        {"schedule_id": swap_data.schedule_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Escala não encontrada")
+    
+    if member["member_id"] not in schedule.get("assigned_members", []):
+        raise HTTPException(status_code=400, detail="Você não está escalado para esta data")
+    
+    existing = await db.swap_requests.find_one({
+        "schedule_id": swap_data.schedule_id,
+        "requester_member_id": member["member_id"],
+        "status": "pending"
+    })
+    if existing:
+        raise HTTPException(status_code=400, detail="Você já tem uma solicitação pendente para esta escala")
+    
+    swap_request = ScheduleSwapRequest(
+        entity_id=entity_id,
+        schedule_id=swap_data.schedule_id,
+        requester_member_id=member["member_id"],
+        target_member_id=swap_data.target_member_id,
+        reason=swap_data.reason
+    )
+    doc = swap_request.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.swap_requests.insert_one(doc)
+    
+    return await db.swap_requests.find_one({"swap_id": doc["swap_id"]}, {"_id": 0})
+
+@api_router.get("/schedules/swap-requests")
+async def get_swap_requests(status: Optional[str] = "pending", user: User = Depends(get_current_user)):
+    """Listar solicitações de troca"""
+    entity_id = await get_current_entity_id(user)
+    
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        return []
+    
+    query = {"entity_id": entity_id}
+    if status:
+        query["status"] = status
+    
+    swap_requests = await db.swap_requests.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    enriched = []
+    for req in swap_requests:
+        requester = await db.members.find_one({"member_id": req["requester_member_id"]}, {"_id": 0})
+        req["requester_name"] = requester.get("name", "Desconhecido") if requester else "Desconhecido"
+        req["requester_picture"] = requester.get("picture") if requester else None
+        
+        schedule = await db.schedules.find_one({"schedule_id": req["schedule_id"]}, {"_id": 0})
+        if schedule:
+            req["schedule_title"] = schedule.get("title", "")
+            req["schedule_date"] = schedule.get("date", "")
+            req["schedule_type"] = schedule.get("schedule_type", "")
+        
+        can_accept = False
+        if req["status"] == "pending" and req["requester_member_id"] != member["member_id"]:
+            if req["target_member_id"]:
+                can_accept = req["target_member_id"] == member["member_id"]
+            else:
+                can_accept = True
+        
+        req["can_accept"] = can_accept
+        req["is_mine"] = req["requester_member_id"] == member["member_id"]
+        
+        enriched.append(req)
+    
+    return enriched
+
+@api_router.get("/schedules/my-swap-requests")
+async def get_my_swap_requests(user: User = Depends(get_current_user)):
+    """Listar minhas solicitações de troca"""
+    entity_id = await get_current_entity_id(user)
+    
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        return []
+    
+    swap_requests = await db.swap_requests.find(
+        {"requester_member_id": member["member_id"], "entity_id": entity_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    for req in swap_requests:
+        schedule = await db.schedules.find_one({"schedule_id": req["schedule_id"]}, {"_id": 0})
+        if schedule:
+            req["schedule_title"] = schedule.get("title", "")
+            req["schedule_date"] = schedule.get("date", "")
+        if req.get("accepted_by"):
+            accepter = await db.members.find_one({"member_id": req["accepted_by"]}, {"_id": 0})
+            req["accepted_by_name"] = accepter.get("name", "") if accepter else ""
+    
+    return swap_requests
+
+@api_router.post("/schedules/swap-requests/{swap_id}/respond")
+async def respond_to_swap_request(swap_id: str, response: SwapResponse, user: User = Depends(get_current_user)):
+    """Aceitar ou recusar solicitação de troca"""
+    entity_id = await get_current_entity_id(user)
+    
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    
+    swap_request = await db.swap_requests.find_one(
+        {"swap_id": swap_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not swap_request:
+        raise HTTPException(status_code=404, detail="Solicitação não encontrada")
+    
+    if swap_request["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Esta solicitação já foi respondida")
+    
+    if swap_request["target_member_id"] and swap_request["target_member_id"] != member["member_id"]:
+        raise HTTPException(status_code=403, detail="Esta solicitação não é para você")
+    
+    if swap_request["requester_member_id"] == member["member_id"]:
+        raise HTTPException(status_code=400, detail="Você não pode responder à sua própria solicitação")
+    
+    if response.accept:
+        schedule = await db.schedules.find_one({"schedule_id": swap_request["schedule_id"]}, {"_id": 0})
+        if not schedule:
+            raise HTTPException(status_code=404, detail="Escala não encontrada")
+        
+        requester_id = swap_request["requester_member_id"]
+        accepter_id = member["member_id"]
+        
+        new_assigned = [m for m in schedule.get("assigned_members", []) if m != requester_id]
+        if accepter_id not in new_assigned:
+            new_assigned.append(accepter_id)
+        
+        new_confirmed = [m for m in schedule.get("confirmed_members", []) if m != requester_id]
+        new_declined = [m for m in schedule.get("declined_members", []) if m != requester_id]
+        
+        await db.schedules.update_one(
+            {"schedule_id": swap_request["schedule_id"]},
+            {"$set": {
+                "assigned_members": new_assigned,
+                "confirmed_members": new_confirmed,
+                "declined_members": new_declined,
+                f"substitutes.{requester_id}": accepter_id
+            }}
+        )
+        
+        await db.swap_requests.update_one(
+            {"swap_id": swap_id},
+            {"$set": {
+                "status": "accepted",
+                "accepted_by": accepter_id,
+                "resolved_at": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+        
+        await award_badge(user.user_id, "helper", entity_id)
+        await add_points(user.user_id, 20, entity_id)
+        
+        return {"message": "Troca aceita! Você foi adicionado à escala.", "status": "accepted"}
+    else:
+        if swap_request["target_member_id"] == member["member_id"]:
+            await db.swap_requests.update_one(
+                {"swap_id": swap_id},
+                {"$set": {
+                    "status": "rejected",
+                    "resolved_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            return {"message": "Solicitação recusada.", "status": "rejected"}
+        else:
+            raise HTTPException(status_code=400, detail="Apenas o membro alvo pode recusar diretamente")
+
+@api_router.delete("/schedules/swap-requests/{swap_id}")
+async def cancel_swap_request(swap_id: str, user: User = Depends(get_current_user)):
+    """Cancelar minha solicitação de troca"""
+    entity_id = await get_current_entity_id(user)
+    
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    
+    swap_request = await db.swap_requests.find_one(
+        {"swap_id": swap_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not swap_request:
+        raise HTTPException(status_code=404, detail="Solicitação não encontrada")
+    
+    if swap_request["requester_member_id"] != member["member_id"]:
+        raise HTTPException(status_code=403, detail="Você só pode cancelar suas próprias solicitações")
+    
+    if swap_request["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Só é possível cancelar solicitações pendentes")
+    
+    await db.swap_requests.update_one(
+        {"swap_id": swap_id},
+        {"$set": {"status": "cancelled", "resolved_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"message": "Solicitação cancelada"}
+
+# ============== END SWAP ROUTES ==============
+
 @api_router.get("/schedules/{schedule_id}")
 async def get_schedule(schedule_id: str, user: User = Depends(get_current_user)):
     entity_id = await get_current_entity_id(user)
