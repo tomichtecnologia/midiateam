@@ -6,7 +6,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
 // Pages
+import HomePage from "@/pages/HomePage";
 import LoginPage from "@/pages/LoginPage";
+import RegisterPage from "@/pages/RegisterPage";
+import ForgotPasswordPage from "@/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/pages/ResetPasswordPage";
 import Dashboard from "@/pages/Dashboard";
 import SchedulesPage from "@/pages/SchedulesPage";
 import MembersPage from "@/pages/MembersPage";
@@ -19,57 +23,6 @@ import SidebarLayout from "@/components/SidebarLayout";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-
-// Auth Callback Component
-const AuthCallback = () => {
-  const navigate = useNavigate();
-  const hasProcessed = useRef(false);
-
-  useEffect(() => {
-    if (hasProcessed.current) return;
-    hasProcessed.current = true;
-
-    const processSession = async () => {
-      const hash = window.location.hash;
-      const sessionId = new URLSearchParams(hash.substring(1)).get("session_id");
-
-      if (!sessionId) {
-        navigate("/login");
-        return;
-      }
-
-      try {
-        const response = await axios.post(
-          `${API}/auth/session`,
-          { session_id: sessionId },
-          { withCredentials: true }
-        );
-
-        if (response.data) {
-          toast.success("Login realizado com sucesso!");
-          navigate("/dashboard", { state: { user: response.data } });
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
-        toast.error("Erro ao fazer login");
-        navigate("/login");
-      }
-    };
-
-    processSession();
-  }, [navigate]);
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-        <p className="mt-4 text-muted-foreground">Autenticando...</p>
-      </div>
-    </div>
-  );
-};
-
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
@@ -78,7 +31,7 @@ const ProtectedRoute = ({ children }) => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Skip if user data passed from AuthCallback
+    // Skip if user data passed from login
     if (location.state?.user) {
       setUser(location.state.user);
       setIsAuthenticated(true);
@@ -120,16 +73,16 @@ const ProtectedRoute = ({ children }) => {
 
 // App Router Component
 function AppRouter() {
-  const location = useLocation();
-
-  // Check URL fragment for session_id (synchronous check)
-  if (location.hash?.includes("session_id=")) {
-    return <AuthCallback />;
-  }
-
   return (
     <Routes>
+      {/* Public Routes */}
+      <Route path="/" element={<HomePage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+      
+      {/* Protected Routes */}
       <Route
         path="/dashboard"
         element={
@@ -186,8 +139,9 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
-      <Route path="/" element={<Navigate to="/dashboard" />} />
-      <Route path="*" element={<Navigate to="/dashboard" />} />
+      
+      {/* Catch all - redirect to home */}
+      <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
 }

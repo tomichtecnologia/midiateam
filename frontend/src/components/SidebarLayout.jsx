@@ -14,9 +14,9 @@ import {
   Settings,
   LogOut,
   Menu,
-  X,
   ChevronRight,
-  Trophy
+  Trophy,
+  Play
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -40,10 +40,10 @@ const SidebarContent = ({ user, pathname, onLogout, onClose }) => (
     <div className="p-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-          <span className="text-white font-bold text-lg">R</span>
+          <Play className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h1 className="font-outfit font-bold text-lg text-white">Tomich Gestão de Mídia</h1>
+          <h1 className="font-outfit font-bold text-lg text-white">Mídia Team</h1>
           <p className="text-xs text-white/60">Sistema de Mídia</p>
         </div>
       </div>
@@ -104,6 +104,15 @@ const SidebarContent = ({ user, pathname, onLogout, onClose }) => (
         Sair
       </Button>
     </div>
+
+    {/* Footer */}
+    <div className="px-4 pb-4">
+      <div className="text-center text-xs text-white/40 pt-3 border-t border-white/10">
+        <p>Desenvolvido por</p>
+        <p className="font-semibold text-white/60">Tomich Tecnologia</p>
+        <p className="mt-1">© {new Date().getFullYear()}</p>
+      </div>
+    </div>
   </div>
 );
 
@@ -162,9 +171,9 @@ export default function SidebarLayout({ children, user }) {
 
         <div className="flex items-center gap-2 ml-4">
           <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold">R</span>
+            <Play className="w-4 h-4 text-white" />
           </div>
-          <span className="font-outfit font-bold text-white">Tomich Gestão de Mídia</span>
+          <span className="font-outfit font-bold text-white">Mídia Team</span>
         </div>
       </header>
 
