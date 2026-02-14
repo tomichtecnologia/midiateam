@@ -295,11 +295,25 @@ const ResponsibilityCard = ({ responsibility, members, onEdit, onDelete, onToggl
 export default function SchedulesPage() {
   const [schedules, setSchedules] = useState([]);
   const [members, setMembers] = useState([]);
+  const [responsibilities, setResponsibilities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUserMember, setCurrentUserMember] = useState(null);
+  
+  // Responsibilities state
+  const [isRespDialogOpen, setIsRespDialogOpen] = useState(false);
+  const [editingResponsibility, setEditingResponsibility] = useState(null);
+  const [respFormData, setRespFormData] = useState({
+    title: "",
+    description: "",
+    category: "other",
+    assigned_to: "",
+    priority: "medium",
+    frequency: "always",
+    notes: ""
+  });
 
   // Form state
   const [formData, setFormData] = useState({
