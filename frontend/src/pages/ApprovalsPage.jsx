@@ -672,6 +672,7 @@ export default function ApprovalsPage() {
               key={approval.approval_id}
               approval={approval}
               onVote={handleVote}
+              onReject={handleOpenRejectDialog}
               onAdminAction={handleAdminAction}
               currentUserId={currentUser?.user_id}
               totalVoters={votingStats.total_voters}
@@ -682,6 +683,51 @@ export default function ApprovalsPage() {
           ))}
         </div>
       )}
+
+      {/* Rejection Reason Dialog */}
+      <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit flex items-center gap-2 text-red-600">
+              <ThumbsDown className="w-5 h-5" />
+              Motivo da Rejeição
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Por favor, explique o motivo da rejeição. Este feedback ajudará o criador a melhorar o conteúdo.
+            </p>
+            <div className="space-y-2">
+              <Label htmlFor="rejection-reason">Motivo *</Label>
+              <Textarea
+                id="rejection-reason"
+                placeholder="Ex: A qualidade da imagem está baixa, precisa de ajustes na iluminação..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="min-h-[100px]"
+                data-testid="rejection-reason-input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsRejectDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleSubmitRejection}
+              disabled={!rejectionReason.trim()}
+              data-testid="submit-rejection-btn"
+            >
+              <ThumbsDown className="w-4 h-4 mr-2" />
+              Confirmar Rejeição
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
