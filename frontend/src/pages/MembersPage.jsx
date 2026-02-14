@@ -473,6 +473,65 @@ export default function MembersPage() {
         </Dialog>
       </div>
 
+      {/* Pending Registrations - Admin only */}
+      {isAdmin && pendingRegistrations.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50" data-testid="pending-registrations-section">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-outfit text-lg flex items-center gap-2 text-amber-800">
+              <Clock className="w-5 h-5" />
+              Cadastros Pendentes ({pendingRegistrations.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {pendingRegistrations.map((reg) => (
+                <div
+                  key={reg.registration_id}
+                  className="flex items-center justify-between p-4 bg-white rounded-lg border"
+                  data-testid={`pending-reg-${reg.registration_id}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Avatar className="w-10 h-10">
+                      <AvatarFallback className="bg-amber-100 text-amber-700">
+                        {reg.name?.charAt(0) || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{reg.name}</p>
+                      <p className="text-sm text-muted-foreground">{reg.email}</p>
+                      {reg.phone && (
+                        <p className="text-xs text-muted-foreground">{reg.phone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={() => handleRejectRegistration(reg.registration_id)}
+                      data-testid={`reject-reg-${reg.registration_id}`}
+                    >
+                      <XCircle className="w-4 h-4 mr-1" />
+                      Rejeitar
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => handleApproveRegistration(reg.registration_id)}
+                      data-testid={`approve-reg-${reg.registration_id}`}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-1" />
+                      Aprovar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
