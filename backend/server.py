@@ -1167,6 +1167,124 @@ async def delete_link(link_id: str, user: User = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Link not found")
     return {"message": "Link deleted"}
 
+# ============== DELEGATED RESPONSIBILITIES ROUTES ==============
+
+@api_router.get("/responsibilities")
+async def get_responsibilities(
+    category: Optional[str] = None,
+    active_only: bool = True,
+    user: User = Depends(get_current_user)
+):
+    entity_id = await get_current_entity_id(user)
+    query = {"entity_id": entity_id}
+    if category:
+        query["category"] = category
+    if active_only:
+        query["active"] = True
+    
+    responsibilities = await db.responsibilities.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return responsibilities
+
+@api_router.get("/responsibilities/{responsibility_id}")
+async def get_responsibility(responsibility_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    responsibility = await db.responsibilities.find_one(
+        {"responsibility_id": responsibility_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not responsibility:
+        raise HTTPException(status_code=404, detail="Responsabilidade não encontrada")
+    return responsibility
+
+@api_router.post("/responsibilities")
+async def create_responsibility(
+    resp_data: DelegatedResponsibilityCreate,
+    user: User = Depends(get_current_user)
+):
+    entity_id = await get_current_entity_id(user)
+    
+    # Verify member exists
+    member = await db.members.find_one(
+        {"member_id": resp_data.assigned_to, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    
+    responsibility = DelegatedResponsibility(
+        entity_id=entity_id,
+        **resp_data.model_dump(),
+        created_by=user.user_id
+    )
+    doc = responsibility.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.responsibilities.insert_one(doc)
+    
+    return await db.responsibilities.find_one({"responsibility_id": doc["responsibility_id"]}, {"_id": 0})
+
+@api_router.put("/responsibilities/{responsibility_id}")
+async def update_responsibility(
+    responsibility_id: str,
+    resp_data: DelegatedResponsibilityCreate,
+    user: User = Depends(get_current_user)
+):
+    entity_id = await get_current_entity_id(user)
+    
+    # Verify member exists
+    member = await db.members.find_one(
+        {"member_id": resp_data.assigned_to, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Membro não encontrado")
+    
+    result = await db.responsibilities.update_one(
+        {"responsibility_id": responsibility_id, "entity_id": entity_id},
+        {"$set": resp_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Responsabilidade não encontrada")
+    
+    return await db.responsibilities.find_one({"responsibility_id": responsibility_id}, {"_id": 0})
+
+@api_router.patch("/responsibilities/{responsibility_id}/toggle")
+async def toggle_responsibility(responsibility_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    
+    responsibility = await db.responsibilities.find_one(
+        {"responsibility_id": responsibility_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    if not responsibility:
+        raise HTTPException(status_code=404, detail="Responsabilidade não encontrada")
+    
+    new_status = not responsibility.get("active", True)
+    await db.responsibilities.update_one(
+        {"responsibility_id": responsibility_id},
+        {"$set": {"active": new_status}}
+    )
+    
+    return {"message": "Status alterado", "active": new_status}
+
+@api_router.delete("/responsibilities/{responsibility_id}")
+async def delete_responsibility(responsibility_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    result = await db.responsibilities.delete_one(
+        {"responsibility_id": responsibility_id, "entity_id": entity_id}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Responsabilidade não encontrada")
+    return {"message": "Responsabilidade excluída"}
+
+@api_router.get("/responsibilities/by-member/{member_id}")
+async def get_responsibilities_by_member(member_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    responsibilities = await db.responsibilities.find(
+        {"assigned_to": member_id, "entity_id": entity_id, "active": True},
+        {"_id": 0}
+    ).to_list(100)
+    return responsibilities
+
 # ============== GAMIFICATION ROUTES ==============
 
 @api_router.get("/gamification/leaderboard")
