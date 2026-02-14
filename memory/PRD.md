@@ -47,6 +47,7 @@ Sistema de gerenciamento de mídia para igreja, incluindo:
 - [x] Calendário visual
 - [x] Sistema de recorrência (diário, semanal, mensal)
 - [x] Separação por tipos
+- [x] Funções/Responsabilidades delegadas a membros
 
 ### Membros
 - [x] CRUD completo
