@@ -586,6 +586,38 @@ export default function ApprovalsPage() {
     setRejectionReason("");
   };
 
+  // Creator responds to rejection reasons
+  const handleCreatorRespond = async (approvalId, responseText) => {
+    try {
+      await axios.post(
+        `${API}/approvals/${approvalId}/respond`,
+        { response: responseText },
+        { withCredentials: true }
+      );
+      toast.success("Resposta salva! Agora você pode solicitar reavaliação.");
+      fetchData();
+    } catch (error) {
+      console.error("Error responding:", error);
+      toast.error(error.response?.data?.detail || "Erro ao salvar resposta");
+    }
+  };
+
+  // Creator requests reevaluation
+  const handleRequestReevaluation = async (approvalId) => {
+    try {
+      await axios.post(
+        `${API}/approvals/${approvalId}/request-reevaluation`,
+        {},
+        { withCredentials: true }
+      );
+      toast.success("Reavaliação solicitada! O conteúdo voltou para votação.");
+      fetchData();
+    } catch (error) {
+      console.error("Error requesting reevaluation:", error);
+      toast.error(error.response?.data?.detail || "Erro ao solicitar reavaliação");
+    }
+  };
+
   const handleAdminAction = async (approvalId, action, userId = null) => {
     try {
       if (action === "reset") {
