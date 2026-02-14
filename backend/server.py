@@ -1074,6 +1074,88 @@ async def get_voting_stats(user: User = Depends(get_current_user)):
         "is_admin": is_admin
     }
 
+# Criador responde aos motivos de rejeição
+@api_router.post("/approvals/{approval_id}/respond")
+async def respond_to_rejection(
+    approval_id: str,
+    response_data: CreatorResponseRequest,
+    user: User = Depends(get_current_user)
+):
+    entity_id = await get_current_entity_id(user)
+    approval = await db.content_approvals.find_one(
+        {"approval_id": approval_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    
+    if not approval:
+        raise HTTPException(status_code=404, detail="Aprovação não encontrada")
+    
+    # Apenas o criador pode responder
+    if approval["submitted_by"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Apenas o criador pode responder aos motivos")
+    
+    # Só pode responder se estiver rejeitado
+    if approval["status"] != "rejected":
+        raise HTTPException(status_code=400, detail="Só é possível responder a conteúdos rejeitados")
+    
+    await db.content_approvals.update_one(
+        {"approval_id": approval_id},
+        {"$set": {"creator_response": response_data.response}}
+    )
+    
+    return {"message": "Resposta registrada com sucesso"}
+
+# Criador solicita reavaliação
+@api_router.post("/approvals/{approval_id}/request-reevaluation")
+async def request_reevaluation(approval_id: str, user: User = Depends(get_current_user)):
+    entity_id = await get_current_entity_id(user)
+    approval = await db.content_approvals.find_one(
+        {"approval_id": approval_id, "entity_id": entity_id},
+        {"_id": 0}
+    )
+    
+    if not approval:
+        raise HTTPException(status_code=404, detail="Aprovação não encontrada")
+    
+    # Apenas o criador pode solicitar reavaliação
+    if approval["submitted_by"] != user.user_id:
+        raise HTTPException(status_code=403, detail="Apenas o criador pode solicitar reavaliação")
+    
+    # Só pode solicitar se estiver rejeitado
+    if approval["status"] != "rejected":
+        raise HTTPException(status_code=400, detail="Só é possível solicitar reavaliação de conteúdos rejeitados")
+    
+    # Salvar histórico da revisão anterior
+    revision_history_entry = {
+        "revision_number": approval.get("revision_count", 1),
+        "status": approval["status"],
+        "votes_for": approval.get("votes_for", []),
+        "votes_against": approval.get("votes_against", []),
+        "rejection_reasons": approval.get("rejection_reasons", []),
+        "creator_response": approval.get("creator_response"),
+        "closed_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Resetar votação e status
+    await db.content_approvals.update_one(
+        {"approval_id": approval_id},
+        {
+            "$set": {
+                "status": "pending",
+                "votes_for": [],
+                "votes_against": [],
+                "rejection_reasons": [],
+                "creator_response": None,
+                "revision_count": approval.get("revision_count", 1) + 1
+            },
+            "$push": {
+                "revision_history": revision_history_entry
+            }
+        }
+    )
+    
+    return {"message": "Reavaliação solicitada! O conteúdo voltou para votação."}
+
 # Admin: Estornar voto de um membro
 @api_router.post("/admin/approvals/{approval_id}/revoke-vote")
 async def revoke_vote(approval_id: str, request: Request, user: User = Depends(get_current_user)):
