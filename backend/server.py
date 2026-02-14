@@ -930,14 +930,20 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
     if not member.get("can_vote", False):
         raise HTTPException(status_code=403, detail="Você não tem permissão para votar")
     
+    # Se for voto contra, exigir motivo
+    if vote.vote == "against" and not vote.reason:
+        raise HTTPException(status_code=400, detail="É obrigatório informar o motivo da rejeição")
+    
     is_first_vote = "first_vote" not in member.get("badges", [])
     
+    # Remover votos anteriores
     await db.content_approvals.update_one(
         {"approval_id": approval_id},
         {
             "$pull": {
                 "votes_for": user.user_id,
-                "votes_against": user.user_id
+                "votes_against": user.user_id,
+                "rejection_reasons": {"user_id": user.user_id}
             }
         }
     )
@@ -948,9 +954,19 @@ async def vote_on_approval(approval_id: str, vote: Vote, user: User = Depends(ge
             {"$addToSet": {"votes_for": user.user_id}}
         )
     else:
+        # Adicionar voto contra com motivo
+        rejection_reason = {
+            "user_id": user.user_id,
+            "user_name": member.get("name", "Desconhecido"),
+            "reason": vote.reason,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
         await db.content_approvals.update_one(
             {"approval_id": approval_id},
-            {"$addToSet": {"votes_against": user.user_id}}
+            {
+                "$addToSet": {"votes_against": user.user_id},
+                "$push": {"rejection_reasons": rejection_reason}
+            }
         )
     
     if is_first_vote:
