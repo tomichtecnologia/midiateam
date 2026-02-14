@@ -708,7 +708,7 @@ export default function Dashboard() {
                     <SelectValue placeholder="Qualquer pessoa" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Qualquer pessoa</SelectItem>
+                    <SelectItem value="any">Qualquer pessoa</SelectItem>
                     {members
                       .filter(m => m.member_id !== currentMember?.member_id && m.active)
                       .map((member) => (
