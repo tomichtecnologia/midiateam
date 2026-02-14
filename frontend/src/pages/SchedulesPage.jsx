@@ -56,7 +56,7 @@ import {
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-const ScheduleDetailCard = ({ schedule, members, onConfirm, currentUserMemberId }) => {
+const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUserMemberId, isAdmin }) => {
   const getMemberById = (id) => members.find((m) => m.member_id === id);
   const confirmed = schedule.confirmed_members?.length || 0;
   const total = schedule.assigned_members?.length || 1;
@@ -65,6 +65,7 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, currentUserMemberId 
   const isAssigned = schedule.assigned_members?.includes(currentUserMemberId);
   const hasConfirmed = schedule.confirmed_members?.includes(currentUserMemberId);
   const hasDeclined = schedule.declined_members?.includes(currentUserMemberId);
+  const isRecurring = schedule.repeat_type && schedule.repeat_type !== "none";
 
   const getScheduleTypeLabel = (type) => {
     switch(type) {
