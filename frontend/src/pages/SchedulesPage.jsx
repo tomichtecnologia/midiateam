@@ -1063,6 +1063,7 @@ export default function SchedulesPage() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
