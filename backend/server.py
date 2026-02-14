@@ -134,6 +134,30 @@ class AttendanceConfirmation(BaseModel):
     status: str
     substitute_id: Optional[str] = None
 
+# ============== SCHEDULE SWAP/SUBSTITUTION ==============
+
+class ScheduleSwapRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    swap_id: str = Field(default_factory=lambda: f"swap_{uuid.uuid4().hex[:12]}")
+    entity_id: str
+    schedule_id: str
+    requester_member_id: str  # Quem está pedindo a troca
+    target_member_id: Optional[str] = None  # Para quem está pedindo (None = qualquer um)
+    reason: str
+    status: str = "pending"  # pending, accepted, rejected, cancelled
+    accepted_by: Optional[str] = None  # Quem aceitou a troca
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    resolved_at: Optional[str] = None
+
+class SwapRequestCreate(BaseModel):
+    schedule_id: str
+    target_member_id: Optional[str] = None  # Se None, fica aberto para qualquer um
+    reason: str
+
+class SwapResponse(BaseModel):
+    swap_id: str
+    accept: bool
+
 class RejectionReason(BaseModel):
     user_id: str
     user_name: str
