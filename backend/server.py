@@ -63,6 +63,51 @@ class User(BaseModel):
     current_entity: Optional[str] = None  # Entidade atual selecionada
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# ============== REGISTRATION/SIGNUP ==============
+
+class PendingRegistration(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    registration_id: str = Field(default_factory=lambda: f"reg_{uuid.uuid4().hex[:12]}")
+    name: str
+    email: str
+    phone: Optional[str] = None
+    password_hash: str
+    status: str = "pending"  # pending, approved, rejected
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    approved_at: Optional[str] = None
+    approved_by: Optional[str] = None
+
+class RegistrationRequest(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class ChangePasswordRequest(BaseModel):
+    current_password: Optional[str] = None  # Admin não precisa
+    new_password: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+
+class RegisteredUser(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    user_id: str = Field(default_factory=lambda: f"user_{uuid.uuid4().hex[:12]}")
+    name: str
+    email: str
+    phone: Optional[str] = None
+    password_hash: str
+    picture: Optional[str] = None
+    is_admin: bool = False
+    is_active: bool = True
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    reset_token: Optional[str] = None
+    reset_token_expires: Optional[str] = None
+
 class Member(BaseModel):
     model_config = ConfigDict(extra="ignore")
     member_id: str = Field(default_factory=lambda: f"member_{uuid.uuid4().hex[:12]}")
