@@ -183,6 +183,11 @@ class Link(BaseModel):
 
 class LinkCreate(BaseModel):
     title: str
+    url: str
+    category: str
+    username: Optional[str] = None
+    password: Optional[str] = None
+    notes: Optional[str] = None
 
 # ============== DELEGATED RESPONSIBILITIES ==============
 
@@ -208,11 +213,6 @@ class DelegatedResponsibilityCreate(BaseModel):
     assigned_to: str
     priority: str = "medium"
     frequency: str = "always"
-    notes: Optional[str] = None
-    url: str
-    category: str
-    username: Optional[str] = None
-    password: Optional[str] = None
     notes: Optional[str] = None
 
 # ============== GAMIFICATION BADGES ==============
