@@ -146,11 +146,13 @@ const MemberCard = ({ member, onEdit, onDelete }) => {
 
 export default function MembersPage() {
   const [members, setMembers] = useState([]);
+  const [pendingRegistrations, setPendingRegistrations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDepartment, setFilterDepartment] = useState("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -165,7 +167,29 @@ export default function MembersPage() {
 
   useEffect(() => {
     fetchMembers();
+    fetchCurrentUser();
   }, []);
+
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await axios.get(`${API}/auth/me`, { withCredentials: true });
+      setIsAdmin(response.data.is_admin || false);
+      if (response.data.is_admin) {
+        fetchPendingRegistrations();
+      }
+    } catch (error) {
+      console.error("Error fetching user:", error);
+    }
+  };
+
+  const fetchPendingRegistrations = async () => {
+    try {
+      const response = await axios.get(`${API}/auth/pending-registrations`, { withCredentials: true });
+      setPendingRegistrations(response.data);
+    } catch (error) {
+      console.error("Error fetching pending registrations:", error);
+    }
+  };
 
   const fetchMembers = async () => {
     try {
