@@ -29,12 +29,20 @@ import {
   Trash2,
   User,
   AlertCircle,
-  MoreVertical
+  MoreVertical,
+  ArrowRightLeft,
+  UserPlus,
+  CalendarPlus,
+  StickyNote,
+  Pencil,
+  ClipboardCheck,
+  ListChecks
 } from "lucide-react";
 import axios from "axios";
 import { toast } from "sonner";
 import { format, parseISO, isSameDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { getAvatarUrl } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,10 +61,34 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
-const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUserMemberId, isAdmin }) => {
+// ============== GOOGLE CALENDAR URL HELPER ==============
+
+const generateGoogleCalendarUrl = (schedule) => {
+  const title = encodeURIComponent(schedule.title || "Escala");
+
+  // Parse date and times
+  const dateStr = schedule.date; // "2026-02-16"
+  const startTime = schedule.start_time || "08:00"; // "HH:mm"
+  const endTime = schedule.end_time || "09:00";
+
+  // Build ISO date strings without timezone (Google will use user's local tz)
+  const startDate = dateStr.replace(/-/g, "") + "T" + startTime.replace(/:/g, "") + "00";
+  const endDate = dateStr.replace(/-/g, "") + "T" + endTime.replace(/:/g, "") + "00";
+
+  const description = encodeURIComponent(
+    `${schedule.description || ""}\n\nEscala gerada pelo Mídia Team (midiateam.com.br)`
+  );
+
+  const location = encodeURIComponent(schedule.location || "");
+
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${description}&location=${location}`;
+};
+
+// ============== SCHEDULE DETAIL CARD ==============
+const ScheduleDetailCard = ({ schedule, members, onConfirm, onEdit, onDelete, onRequestSwap, currentUserMemberId, isAdmin, scheduleTypes }) => {
   const getMemberById = (id) => members.find((m) => m.member_id === id);
   const confirmed = schedule.confirmed_members?.length || 0;
   const total = schedule.assigned_members?.length || 1;
@@ -68,7 +100,9 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
   const isRecurring = schedule.repeat_type && schedule.repeat_type !== "none";
 
   const getScheduleTypeLabel = (type) => {
-    switch(type) {
+    const found = scheduleTypes?.find(t => t.value === type);
+    if (found) return found.label;
+    switch (type) {
       case "class": return "Aula";
       case "content": return "Postagem";
       default: return type;
@@ -76,10 +110,18 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
   };
 
   const getScheduleTypeIcon = (type) => {
-    switch(type) {
-      case "class": return <GraduationCap className="w-5 h-5 text-primary" />;
-      case "content": return <Instagram className="w-5 h-5 text-pink-500" />;
-      default: return <CalendarDays className="w-5 h-5" />;
+    const found = scheduleTypes?.find(t => t.value === type);
+    const colorClass = found?.color === 'pink' ? 'text-pink-500' :
+      found?.color === 'green' ? 'text-green-500' :
+        found?.color === 'amber' ? 'text-amber-500' :
+          found?.color === 'purple' ? 'text-purple-500' :
+            found?.color === 'red' ? 'text-red-500' :
+              found?.color === 'blue' ? 'text-blue-500' :
+                'text-primary';
+    switch (type) {
+      case "class": return <GraduationCap className={`w-5 h-5 ${colorClass}`} />;
+      case "content": return <Instagram className={`w-5 h-5 ${colorClass}`} />;
+      default: return <CalendarDays className={`w-5 h-5 ${colorClass}`} />;
     }
   };
 
@@ -104,9 +146,9 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
               {isRecurring && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Repeat className="w-3 h-3" />
-                  {schedule.repeat_type === "weekly" ? "Semanal" : 
-                   schedule.repeat_type === "daily" ? "Diário" : 
-                   schedule.repeat_type === "monthly" ? "Mensal" : ""}
+                  {schedule.repeat_type === "weekly" ? "Semanal" :
+                    schedule.repeat_type === "daily" ? "Diário" :
+                      schedule.repeat_type === "monthly" ? "Mensal" : ""}
                 </Badge>
               )}
             </div>
@@ -119,7 +161,19 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
+                    onClick={() => {
+                      if (typeof onEdit === "function") {
+                        onEdit(schedule);
+                      }
+                    }}
+                    data-testid={`edit-schedule-${schedule.schedule_id}`}
+                  >
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Editar escala
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
                     className="text-destructive focus:text-destructive"
                     onClick={() => onDelete(schedule.schedule_id, false)}
                     data-testid={`delete-single-${schedule.schedule_id}`}
@@ -130,7 +184,7 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
                   {isRecurring && (
                     <>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         className="text-destructive focus:text-destructive"
                         onClick={() => onDelete(schedule.schedule_id, true)}
                         data-testid={`delete-all-${schedule.schedule_id}`}
@@ -177,27 +231,74 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
               const member = getMemberById(memberId);
               const isConfirmed = schedule.confirmed_members?.includes(memberId);
               const isDeclined = schedule.declined_members?.includes(memberId);
-              
+
               return (
                 <div
                   key={memberId}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${
-                    isConfirmed
-                      ? "bg-green-50 border-green-200"
-                      : isDeclined
+                  className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg border ${isConfirmed
+                    ? "bg-green-50 border-green-200"
+                    : isDeclined
                       ? "bg-red-50 border-red-200"
                       : "bg-muted border-border"
-                  }`}
+                    }`}
                 >
-                  <Avatar className="w-6 h-6">
-                    <AvatarImage src={member?.picture} />
-                    <AvatarFallback className="text-xs">
-                      {member?.name?.charAt(0) || "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm">{member?.name || "Desconhecido"}</span>
-                  {isConfirmed && <CheckCircle className="w-4 h-4 text-green-600" />}
-                  {isDeclined && <XCircle className="w-4 h-4 text-red-500" />}
+                  <div className="flex items-center gap-2">
+                    <Avatar className="w-6 h-6">
+                      <AvatarImage src={getAvatarUrl(member?.picture)} />
+                      <AvatarFallback className="text-xs">
+                        {member?.name?.charAt(0) || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <span className="text-sm font-medium">{member?.name || "Desconhecido"}</span>
+                      {schedule.member_roles?.[memberId] && (
+                        <span className="text-xs text-muted-foreground">{schedule.member_roles[memberId]}</span>
+                      )}
+                    </div>
+                    {isConfirmed && <CheckCircle className="w-4 h-4 text-green-600 mt-1" />}
+                    {isDeclined && <XCircle className="w-4 h-4 text-red-500 mt-1" />}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {/* Swap Button: For self or Admin for anyone */}
+                    {(memberId === currentUserMemberId || isAdmin) && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        onClick={() => onRequestSwap(schedule, memberId)}
+                        title="Solicitar Troca"
+                      >
+                        <ArrowRightLeft className="w-4 h-4" />
+                      </Button>
+                    )}
+                    {isAdmin && (
+                      <div className="flex items-center gap-1">
+                        {!isConfirmed && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-green-600 hover:bg-green-50"
+                            onClick={() => onConfirm(schedule.schedule_id, memberId, "confirmed")}
+                            title="Confirmar Presença"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {!isDeclined && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-red-500 hover:bg-red-50"
+                            onClick={() => onConfirm(schedule.schedule_id, memberId, "declined")}
+                            title="Recusar Presença"
+                          >
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -222,15 +323,47 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onDelete, currentUse
               data-testid={`decline-attendance-${schedule.schedule_id}`}
             >
               <XCircle className="w-5 h-5 mr-2" />
-              Não Posso Ir
+              Não Posso
+            </Button>
+            <Button
+              variant="outline"
+              className="h-12 w-12 p-0"
+              onClick={() => onRequestSwap(schedule)}
+              data-testid={`request-swap-${schedule.schedule_id}`}
+              title="Solicitar Troca"
+            >
+              <ArrowRightLeft className="w-5 h-5" />
             </Button>
           </div>
         )}
 
         {hasConfirmed && (
-          <div className="flex items-center gap-2 text-green-600 pt-4 border-t">
-            <CheckCircle className="w-5 h-5" />
-            <span className="font-medium">Presença Confirmada</span>
+          <div className="flex items-center justify-between pt-4 border-t">
+            <div className="flex items-center gap-2 text-green-600">
+              <CheckCircle className="w-5 h-5" />
+              <span className="font-medium">Presença Confirmada</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200 h-8 gap-1"
+                onClick={() => window.open(generateGoogleCalendarUrl(schedule), "_blank")}
+                title="Adicionar ao Google Calendar"
+              >
+                <CalendarPlus className="w-4 h-4" />
+                <span className="hidden sm:inline">Google Calendar</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-amber-600 hover:text-amber-700 h-8"
+                onClick={() => onRequestSwap(schedule)}
+              >
+                <ArrowRightLeft className="w-4 h-4 mr-1" />
+                Trocar
+              </Button>
+            </div>
           </div>
         )}
 
@@ -288,7 +421,7 @@ const ResponsibilityCard = ({ responsibility, members, onEdit, onDelete, onToggl
                 <Badge variant="secondary">Inativo</Badge>
               )}
             </div>
-            
+
             <h3 className="font-semibold text-lg">{responsibility.title}</h3>
             <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
               {responsibility.description}
@@ -297,7 +430,7 @@ const ResponsibilityCard = ({ responsibility, members, onEdit, onDelete, onToggl
             <div className="flex items-center gap-4 mt-3 text-sm">
               <div className="flex items-center gap-2">
                 <Avatar className="w-6 h-6">
-                  <AvatarImage src={member?.picture} />
+                  <AvatarImage src={getAvatarUrl(member?.picture)} />
                   <AvatarFallback className="text-xs">{member?.name?.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <span className="font-medium">{member?.name || "Não atribuído"}</span>
@@ -350,13 +483,26 @@ export default function SchedulesPage() {
   const [schedules, setSchedules] = useState([]);
   const [members, setMembers] = useState([]);
   const [responsibilities, setResponsibilities] = useState([]);
+  const [swapRequests, setSwapRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [activeTab, setActiveTab] = useState("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUserMember, setCurrentUserMember] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [scheduleTypes, setScheduleTypes] = useState([
+    { value: "class", label: "Aula", icon: "graduation-cap", color: "primary" },
+    { value: "content", label: "Postagem", icon: "instagram", color: "pink" }
+  ]);
+
+  // Swap states
+  const [swapDialogOpen, setSwapDialogOpen] = useState(false);
+  const [selectedScheduleForSwap, setSelectedScheduleForSwap] = useState(null);
+  const [swapRequesterMemberId, setSwapRequesterMemberId] = useState(null);
+  const [swapReason, setSwapReason] = useState("");
+  const [swapTargetMember, setSwapTargetMember] = useState("");
+
   // Delete confirmation dialog state
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
@@ -364,7 +510,7 @@ export default function SchedulesPage() {
     deleteAll: false,
     scheduleName: ""
   });
-  
+
   // Responsibilities state
   const [isRespDialogOpen, setIsRespDialogOpen] = useState(false);
   const [editingResponsibility, setEditingResponsibility] = useState(null);
@@ -378,6 +524,31 @@ export default function SchedulesPage() {
     notes: ""
   });
 
+  // Calendar Notes state
+  const [calendarNotes, setCalendarNotes] = useState([]);
+  const [noteDialogOpen, setNoteDialogOpen] = useState(false);
+  const [editingNote, setEditingNote] = useState(null);
+  const [noteFormData, setNoteFormData] = useState({
+    date: format(new Date(), "yyyy-MM-dd"),
+    title: "",
+    content: "",
+    color: "blue"
+  });
+
+  // Checklist state
+  const [checklistTemplates, setChecklistTemplates] = useState([]);
+  const [selectedChecklist, setSelectedChecklist] = useState("");
+  const [checklistAssignee, setChecklistAssignee] = useState("");
+
+  const noteColors = [
+    { value: "blue", label: "Azul", bg: "bg-blue-500", light: "bg-blue-50 border-blue-200 text-blue-800" },
+    { value: "red", label: "Vermelho", bg: "bg-red-500", light: "bg-red-50 border-red-200 text-red-800" },
+    { value: "green", label: "Verde", bg: "bg-green-500", light: "bg-green-50 border-green-200 text-green-800" },
+    { value: "amber", label: "Amarelo", bg: "bg-amber-500", light: "bg-amber-50 border-amber-200 text-amber-800" },
+    { value: "purple", label: "Roxo", bg: "bg-purple-500", light: "bg-purple-50 border-purple-200 text-purple-800" },
+    { value: "pink", label: "Rosa", bg: "bg-pink-500", light: "bg-pink-50 border-pink-200 text-pink-800" }
+  ];
+
   // Form state
   const [formData, setFormData] = useState({
     title: "",
@@ -387,6 +558,7 @@ export default function SchedulesPage() {
     start_time: "19:00",
     end_time: "21:00",
     assigned_members: [],
+    member_roles: {}, // member_id -> role
     repeat_enabled: false,
     repeat_type: "none", // none, daily, weekly, monthly
     repeat_days: [], // for weekly: ["monday", "wednesday", "friday"]
@@ -409,20 +581,48 @@ export default function SchedulesPage() {
 
   const fetchData = async () => {
     try {
-      const [schedulesRes, membersRes, userRes, respRes] = await Promise.all([
+      const [schedulesRes, membersRes, userRes, respRes, swapRes] = await Promise.all([
         axios.get(`${API}/schedules`, { withCredentials: true }),
         axios.get(`${API}/members`, { withCredentials: true }),
         axios.get(`${API}/auth/me`, { withCredentials: true }),
-        axios.get(`${API}/responsibilities?active_only=false`, { withCredentials: true })
+        axios.get(`${API}/responsibilities?active_only=false`, { withCredentials: true }),
+        axios.get(`${API}/schedules/swap-requests?status=pending`, { withCredentials: true })
       ]);
 
       setSchedules(schedulesRes.data);
       setMembers(membersRes.data);
       setResponsibilities(respRes.data);
+      setSwapRequests(swapRes.data);
 
       const userMember = membersRes.data.find(m => m.user_id === userRes.data.user_id);
       setCurrentUserMember(userMember);
       setIsAdmin(userRes.data.is_admin || userMember?.is_admin || false);
+
+      // Fetch config for schedule types
+      try {
+        const configRes = await axios.get(`${API}/entities/current/config`, { withCredentials: true });
+        if (configRes.data.custom_schedule_types?.length > 0) {
+          setScheduleTypes(configRes.data.custom_schedule_types);
+        }
+      } catch (e) {
+        console.error("Error fetching config:", e);
+      }
+
+      // Fetch calendar notes
+      try {
+        const notesRes = await axios.get(`${API}/calendar-notes`, { withCredentials: true });
+        setCalendarNotes(notesRes.data);
+      } catch (e) {
+        console.error("Error fetching calendar notes:", e);
+      }
+
+      // Fetch checklist templates
+      try {
+        const chkRes = await axios.get(`${API}/checklist-templates`, { withCredentials: true });
+        setChecklistTemplates(chkRes.data);
+      } catch (e) {
+        console.error("Error fetching checklist templates:", e);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
@@ -441,19 +641,72 @@ export default function SchedulesPage() {
         start_time: formData.start_time,
         end_time: formData.end_time,
         assigned_members: formData.assigned_members,
+        member_roles: formData.member_roles,
         repeat_type: formData.repeat_enabled ? formData.repeat_type : "none",
         repeat_days: formData.repeat_days,
         repeat_until: formData.repeat_until
       };
 
-      await axios.post(`${API}/schedules`, scheduleData, { withCredentials: true });
-      toast.success("Escala criada com sucesso!");
+      if (editingSchedule) {
+        const isRecurring = editingSchedule.repeat_type && editingSchedule.repeat_type !== "none";
+        let updateAll = false;
+
+        if (isRecurring) {
+          updateAll = window.confirm(
+            "Esta escala faz parte de uma série recorrente.\n\n" +
+            "Clique OK para aplicar as alterações em TODAS as escalas da série.\n" +
+            "Clique Cancelar para alterar apenas ESTA escala."
+          );
+        }
+
+        const url = `${API}/schedules/${editingSchedule.schedule_id}${updateAll ? '?update_all=true' : ''}`;
+        await axios.put(url, scheduleData, { withCredentials: true });
+
+        // Assign checklist if selected
+        if (selectedChecklist && checklistAssignee) {
+          try {
+            await axios.post(
+              `${API}/schedules/${editingSchedule.schedule_id}/checklists`,
+              { template_id: selectedChecklist, assigned_to: checklistAssignee },
+              { withCredentials: true }
+            );
+            toast.success("Checklist atribuído!");
+          } catch (chkErr) {
+            if (chkErr.response?.status !== 400) {
+              console.error("Error assigning checklist:", chkErr);
+            }
+          }
+        }
+
+        toast.success(updateAll ? "Todas as escalas da série atualizadas!" : "Escala atualizada com sucesso!");
+      } else {
+        const res = await axios.post(`${API}/schedules`, scheduleData, { withCredentials: true });
+        const createdScheduleId = res.data?.schedule_id;
+
+        // Assign checklist if selected
+        if (selectedChecklist && checklistAssignee && createdScheduleId) {
+          try {
+            await axios.post(
+              `${API}/schedules/${createdScheduleId}/checklists`,
+              { template_id: selectedChecklist, assigned_to: checklistAssignee },
+              { withCredentials: true }
+            );
+            toast.success("Escala criada com checklist atribuído!");
+          } catch (chkErr) {
+            console.error("Error assigning checklist:", chkErr);
+            toast.success("Escala criada! (checklist não atribuído)");
+          }
+        } else {
+          toast.success("Escala criada com sucesso!");
+        }
+      }
+
       setIsCreateOpen(false);
       resetForm();
       fetchData();
     } catch (error) {
-      console.error("Error creating schedule:", error);
-      toast.error("Erro ao criar escala");
+      console.error("Error saving schedule:", error);
+      toast.error(editingSchedule ? "Erro ao atualizar escala" : "Erro ao criar escala");
     }
   };
 
@@ -466,11 +719,34 @@ export default function SchedulesPage() {
       start_time: "19:00",
       end_time: "21:00",
       assigned_members: [],
+      member_roles: {},
       repeat_enabled: false,
       repeat_type: "none",
       repeat_days: [],
       repeat_until: ""
     });
+    setEditingSchedule(null);
+    setSelectedChecklist("");
+    setChecklistAssignee("");
+  };
+
+  const handleEditSchedule = (schedule) => {
+    setEditingSchedule(schedule);
+    setFormData({
+      title: schedule.title,
+      description: schedule.description || "",
+      schedule_type: schedule.schedule_type,
+      date: schedule.date,
+      start_time: schedule.start_time,
+      end_time: schedule.end_time,
+      assigned_members: schedule.assigned_members || [],
+      member_roles: schedule.member_roles || {},
+      repeat_enabled: schedule.repeat_type !== "none",
+      repeat_type: schedule.repeat_type || "none",
+      repeat_days: schedule.repeat_days || [],
+      repeat_until: schedule.repeat_until || ""
+    });
+    setIsCreateOpen(true);
   };
 
   const handleConfirmAttendance = async (scheduleId, memberId, status) => {
@@ -480,11 +756,88 @@ export default function SchedulesPage() {
         { schedule_id: scheduleId, member_id: memberId, status },
         { withCredentials: true }
       );
-      toast.success(status === "confirmed" ? "Presença confirmada!" : "Ausência registrada");
+      if (status === "confirmed") {
+        // Find the schedule to generate Google Calendar URL
+        const schedule = schedules.find(s => s.schedule_id === scheduleId);
+        if (schedule) {
+          toast.success("Presença confirmada!", {
+            description: "Deseja salvar no Google Calendar?",
+            duration: 8000,
+            action: {
+              label: "📅 Adicionar ao Calendário",
+              onClick: () => window.open(generateGoogleCalendarUrl(schedule), "_blank"),
+            },
+          });
+        } else {
+          toast.success("Presença confirmada!");
+        }
+      } else {
+        toast.success("Ausência registrada");
+      }
       fetchData();
     } catch (error) {
       console.error("Error confirming attendance:", error);
       toast.error("Erro ao confirmar presença");
+    }
+  };
+
+  const handleAcceptSwap = async (swapId) => {
+    try {
+      await axios.post(
+        `${API}/schedules/swap-requests/${swapId}/respond`,
+        { swap_id: swapId, accept: true },
+        { withCredentials: true }
+      );
+      toast.success("Troca aceita!");
+      fetchData();
+    } catch (error) {
+      console.error("Error accepting swap:", error);
+      toast.error(error.response?.data?.detail || "Erro ao aceitar troca");
+    }
+  };
+
+  const handleCancelSwap = async (swapId) => {
+    try {
+      await axios.delete(`${API}/schedules/swap-requests/${swapId}`, { withCredentials: true });
+      toast.success("Solicitação cancelada");
+      fetchData();
+    } catch (error) {
+      console.error("Error cancelling swap:", error);
+      toast.error("Erro ao cancelar");
+    }
+  };
+
+  const handleOpenSwapDialog = (schedule, requesterMemberId) => {
+    setSelectedScheduleForSwap(schedule);
+    setSwapRequesterMemberId(requesterMemberId || currentUserMember?.member_id);
+    setSwapReason("");
+    setSwapTargetMember("");
+    setSwapDialogOpen(true);
+  };
+
+  const handleCreateSwapRequest = async () => {
+    if (!swapReason.trim()) {
+      toast.error("Informe o motivo da troca");
+      return;
+    }
+
+    try {
+      await axios.post(
+        `${API}/schedules/swap-request`,
+        {
+          schedule_id: selectedScheduleForSwap.schedule_id,
+          target_member_id: swapTargetMember && swapTargetMember !== "any" ? swapTargetMember : null,
+          requester_member_id: swapRequesterMemberId,
+          reason: swapReason.trim()
+        },
+        { withCredentials: true }
+      );
+      toast.success("Solicitação de troca enviada!");
+      setSwapDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error("Error creating swap:", error);
+      toast.error(error.response?.data?.detail || "Erro ao solicitar troca");
     }
   };
 
@@ -502,20 +855,20 @@ export default function SchedulesPage() {
 
   const handleDeleteSchedule = async () => {
     const { scheduleId, deleteAll } = deleteDialog;
-    
+
     try {
-      const url = deleteAll 
+      const url = deleteAll
         ? `${API}/schedules/${scheduleId}?delete_recurring=true`
         : `${API}/schedules/${scheduleId}`;
-      
+
       await axios.delete(url, { withCredentials: true });
-      
+
       if (deleteAll) {
         toast.success("Todas as escalas recorrentes foram excluídas!");
       } else {
         toast.success("Escala excluída com sucesso!");
       }
-      
+
       fetchData();
     } catch (error) {
       console.error("Error deleting schedule:", error);
@@ -573,7 +926,7 @@ export default function SchedulesPage() {
         await axios.post(`${API}/responsibilities`, respFormData, { withCredentials: true });
         toast.success("Responsabilidade criada!");
       }
-      
+
       setIsRespDialogOpen(false);
       resetRespForm();
       fetchData();
@@ -614,7 +967,7 @@ export default function SchedulesPage() {
 
   const handleDeleteResponsibility = async (responsibilityId) => {
     if (!window.confirm("Tem certeza que deseja excluir esta responsabilidade?")) return;
-    
+
     try {
       await axios.delete(
         `${API}/responsibilities/${responsibilityId}`,
@@ -640,6 +993,83 @@ export default function SchedulesPage() {
 
   const datesWithSchedules = schedules.map((s) => parseISO(s.date));
 
+  // Dates with notes
+  const datesWithNotes = calendarNotes.map((n) => parseISO(n.date));
+
+  // Notes for selected date
+  const notesForSelectedDate = calendarNotes.filter((note) =>
+    isSameDay(parseISO(note.date), selectedDate)
+  );
+
+  // ============== CALENDAR NOTE HANDLERS ==============
+  const handleOpenNoteDialog = (date) => {
+    setEditingNote(null);
+    setNoteFormData({
+      date: format(date || selectedDate, "yyyy-MM-dd"),
+      title: "",
+      content: "",
+      color: "blue"
+    });
+    setNoteDialogOpen(true);
+  };
+
+  const handleEditNote = (note) => {
+    setEditingNote(note);
+    setNoteFormData({
+      date: note.date,
+      title: note.title,
+      content: note.content || "",
+      color: note.color || "blue"
+    });
+    setNoteDialogOpen(true);
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteFormData.title.trim()) {
+      toast.error("Informe o título da anotação");
+      return;
+    }
+    try {
+      if (editingNote) {
+        await axios.put(`${API}/calendar-notes/${editingNote.note_id}`, {
+          title: noteFormData.title,
+          content: noteFormData.content,
+          color: noteFormData.color
+        }, { withCredentials: true });
+        toast.success("Anotação atualizada!");
+      } else {
+        await axios.post(`${API}/calendar-notes`, noteFormData, { withCredentials: true });
+        toast.success("Anotação criada!");
+      }
+      setNoteDialogOpen(false);
+      fetchData();
+    } catch (error) {
+      console.error("Error saving note:", error);
+      toast.error("Erro ao salvar anotação");
+    }
+  };
+
+  const handleDeleteNote = async (noteId) => {
+    try {
+      await axios.delete(`${API}/calendar-notes/${noteId}`, { withCredentials: true });
+      toast.success("Anotação excluída!");
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting note:", error);
+      toast.error("Erro ao excluir anotação");
+    }
+  };
+
+  const getNoteColorClasses = (color) => {
+    const c = noteColors.find(nc => nc.value === color);
+    return c ? c.light : noteColors[0].light;
+  };
+
+  const getNoteColorDot = (color) => {
+    const c = noteColors.find(nc => nc.value === color);
+    return c ? c.bg : noteColors[0].bg;
+  };
+
   if (loading) {
     return (
       <div className="space-y-6" data-testid="schedules-loading">
@@ -662,16 +1092,23 @@ export default function SchedulesPage() {
             Gerencie as escalas de aulas e postagens
           </p>
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="create-schedule-btn">
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Escala
-            </Button>
-          </DialogTrigger>
+        <Dialog open={isCreateOpen} onOpenChange={(open) => {
+          setIsCreateOpen(open);
+          if (!open) resetForm();
+        }}>
+          {isAdmin && (
+            <DialogTrigger asChild>
+              <Button data-testid="create-schedule-btn">
+                <Plus className="w-4 h-4 mr-2" />
+                Nova Escala
+              </Button>
+            </DialogTrigger>
+          )}
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="font-outfit">Criar Nova Escala</DialogTitle>
+              <DialogTitle className="font-outfit">
+                {editingSchedule ? "Editar Escala" : "Criar Nova Escala"}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               {/* Tipo de Escala */}
@@ -685,18 +1122,21 @@ export default function SchedulesPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="class">
-                      <div className="flex items-center gap-2">
-                        <GraduationCap className="w-4 h-4" />
-                        Escala de Aulas
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="content">
-                      <div className="flex items-center gap-2">
-                        <Instagram className="w-4 h-4" />
-                        Escala de Postagens
-                      </div>
-                    </SelectItem>
+                    {scheduleTypes.map((type) => (
+                      <SelectItem key={type.value} value={type.value}>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${type.color === 'pink' ? 'bg-pink-500' :
+                            type.color === 'green' ? 'bg-green-500' :
+                              type.color === 'amber' ? 'bg-amber-500' :
+                                type.color === 'purple' ? 'bg-purple-500' :
+                                  type.color === 'red' ? 'bg-red-500' :
+                                    type.color === 'blue' ? 'bg-blue-500' :
+                                      'bg-primary'
+                            }`} />
+                          {type.label}
+                        </div>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -827,9 +1267,15 @@ export default function SchedulesPage() {
                   value=""
                   onValueChange={(value) => {
                     if (!formData.assigned_members.includes(value)) {
+                      const member = members.find(m => m.member_id === value);
+                      const defaultRole = member?.roles?.[0] || member?.role || "";
                       setFormData({
                         ...formData,
-                        assigned_members: [...formData.assigned_members, value]
+                        assigned_members: [...formData.assigned_members, value],
+                        member_roles: {
+                          ...formData.member_roles,
+                          [value]: defaultRole
+                        }
                       });
                     }
                   }}
@@ -848,29 +1294,114 @@ export default function SchedulesPage() {
                 <div className="flex flex-wrap gap-2 mt-2">
                   {formData.assigned_members.map((memberId) => {
                     const member = members.find(m => m.member_id === memberId);
+                    const memberRoles = member?.roles || (member?.role ? [member.role] : []);
+
                     return (
-                      <Badge
-                        key={memberId}
-                        variant="secondary"
-                        className="cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
-                        onClick={() => setFormData({
-                          ...formData,
-                          assigned_members: formData.assigned_members.filter(id => id !== memberId)
-                        })}
-                      >
-                        {member?.name} ×
-                      </Badge>
+                      <div key={memberId} className="flex flex-col gap-1 p-2 border rounded bg-muted/30">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-sm font-medium">{member?.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-5 w-5 text-muted-foreground hover:text-destructive"
+                            onClick={() => {
+                              const newRoles = { ...formData.member_roles };
+                              delete newRoles[memberId];
+                              setFormData({
+                                ...formData,
+                                assigned_members: formData.assigned_members.filter(id => id !== memberId),
+                                member_roles: newRoles
+                              });
+                            }}
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                        <Select
+                          value={formData.member_roles[memberId] || ""}
+                          onValueChange={(role) => setFormData({
+                            ...formData,
+                            member_roles: { ...formData.member_roles, [memberId]: role }
+                          })}
+                        >
+                          <SelectTrigger className="h-7 text-xs">
+                            <SelectValue placeholder="Escolher função..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {memberRoles.map(role => (
+                              <SelectItem key={role} value={role}>{role}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Checklist Assignment Section */}
+              {checklistTemplates.length > 0 && formData.assigned_members.length > 0 && (
+                <div className="space-y-4 p-4 bg-teal-50/50 rounded-lg border border-teal-200/50">
+                  <div className="flex items-center gap-2">
+                    <ClipboardCheck className="w-4 h-4 text-teal-600" />
+                    <Label className="font-medium text-teal-700">Atribuir Checklist</Label>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-sm">Template de Checklist</Label>
+                      <Select
+                        value={selectedChecklist}
+                        onValueChange={(v) => setSelectedChecklist(v === "none" ? "" : v)}
+                      >
+                        <SelectTrigger data-testid="checklist-select">
+                          <SelectValue placeholder="Selecionar checklist (opcional)..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhum</SelectItem>
+                          {checklistTemplates.filter(t => t.active !== false).map(t => (
+                            <SelectItem key={t.template_id} value={t.template_id}>
+                              <div className="flex items-center gap-2">
+                                <ListChecks className="w-4 h-4" />
+                                {t.title} ({t.items?.length || 0} itens)
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedChecklist && (
+                      <div className="space-y-2">
+                        <Label className="text-sm">Responsável pelo Checklist</Label>
+                        <Select
+                          value={checklistAssignee}
+                          onValueChange={(v) => setChecklistAssignee(v)}
+                        >
+                          <SelectTrigger data-testid="checklist-assignee-select">
+                            <SelectValue placeholder="Escolher membro..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {formData.assigned_members.map(memberId => {
+                              const member = members.find(m => m.member_id === memberId);
+                              return (
+                                <SelectItem key={memberId} value={memberId}>
+                                  {member?.name || "Desconhecido"}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline">Cancelar</Button>
               </DialogClose>
               <Button onClick={handleCreateSchedule} data-testid="save-schedule-btn">
-                Criar Escala
+                {editingSchedule ? "Salvar Alterações" : "Criar Escala"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -896,11 +1427,88 @@ export default function SchedulesPage() {
             <ClipboardList className="w-4 h-4 mr-2" />
             Responsabilidades
           </TabsTrigger>
+          <TabsTrigger value="swaps" data-testid="tab-swaps">
+            <ArrowRightLeft className="w-4 h-4 mr-2" />
+            Trocas
+            {swapRequests.length > 0 && (
+              <Badge className="ml-2 bg-amber-500 h-5 px-1.5 min-w-[20px] justify-center">
+                {swapRequests.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* Main Content - Schedules or Responsibilities */}
-      {activeTab === "responsibilities" ? (
+      {/* Main Content - Schedules, Responsibilities or Swaps */}
+      {activeTab === "swaps" ? (
+        // ============== SWAPS TAB ==============
+        <div className="space-y-6">
+          <div>
+            <h2 className="font-outfit text-xl font-semibold">Solicitações de Troca</h2>
+            <p className="text-sm text-muted-foreground">
+              Ajude seus colegas ou gerencie suas solicitações de substituição
+            </p>
+          </div>
+
+          {swapRequests.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <ArrowRightLeft className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Nenhuma solicitação de troca pendente</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {swapRequests.map((request) => (
+                <Card key={request.swap_id} className="border-amber-200 bg-amber-50/30">
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <Avatar className="w-10 h-10 border border-amber-200">
+                        <AvatarImage src={getAvatarUrl(request.requester_picture)} />
+                        <AvatarFallback>{request.requester_name?.charAt(0)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="font-medium text-sm">{request.requester_name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {request.schedule_title}
+                        </p>
+                        <p className="text-xs font-medium text-amber-700">
+                          {request.schedule_date && format(parseISO(request.schedule_date), "EEEE, d 'de' MMMM", { locale: ptBR })}
+                        </p>
+                        <div className="mt-2 p-2 bg-white/50 rounded text-sm italic text-muted-foreground border border-amber-100">
+                          "{request.reason}"
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      {request.can_accept && (
+                        <Button
+                          size="sm"
+                          className="flex-1 bg-green-600 hover:bg-green-700"
+                          onClick={() => handleAcceptSwap(request.swap_id)}
+                        >
+                          <UserPlus className="w-4 h-4 mr-1" />
+                          Eu vou!
+                        </Button>
+                      )}
+                      {request.is_mine && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 border-amber-200 hover:bg-amber-100"
+                          onClick={() => handleCancelSwap(request.swap_id)}
+                        >
+                          Cancelar
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : activeTab === "responsibilities" ? (
         // ============== RESPONSIBILITIES TAB ==============
         <div className="space-y-6">
           {/* Header */}
@@ -915,12 +1523,14 @@ export default function SchedulesPage() {
               setIsRespDialogOpen(open);
               if (!open) resetRespForm();
             }}>
-              <DialogTrigger asChild>
-                <Button data-testid="create-responsibility-btn">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Nova Responsabilidade
-                </Button>
-              </DialogTrigger>
+              {isAdmin && (
+                <DialogTrigger asChild>
+                  <Button data-testid="create-responsibility-btn">
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nova Responsabilidade
+                  </Button>
+                </DialogTrigger>
+              )}
               <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle className="font-outfit">
@@ -1001,7 +1611,7 @@ export default function SchedulesPage() {
                           <SelectItem key={member.member_id} value={member.member_id}>
                             <div className="flex items-center gap-2">
                               <Avatar className="w-5 h-5">
-                                <AvatarImage src={member.picture} />
+                                <AvatarImage src={getAvatarUrl(member.picture)} />
                                 <AvatarFallback className="text-xs">{member.name?.charAt(0)}</AvatarFallback>
                               </Avatar>
                               {member.name}
@@ -1091,82 +1701,163 @@ export default function SchedulesPage() {
         </div>
       ) : (
         // ============== SCHEDULES TAB ==============
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendar */}
-        <Card className="lg:col-span-1" data-testid="schedule-calendar">
-          <CardHeader>
-            <CardTitle className="font-outfit text-lg">Calendário</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={(date) => date && setSelectedDate(date)}
-              locale={ptBR}
-              modifiers={{
-                hasSchedule: datesWithSchedules
-              }}
-              modifiersStyles={{
-                hasSchedule: {
-                  backgroundColor: "hsl(var(--primary) / 0.1)",
-                  fontWeight: "bold"
-                }
-              }}
-              className="rounded-md border"
-            />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Calendar */}
+          <Card className="lg:col-span-1" data-testid="schedule-calendar">
+            <CardHeader>
+              <CardTitle className="font-outfit text-lg">Calendário</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Calendar
+                mode="single"
+                selected={selectedDate}
+                onSelect={(date) => date && setSelectedDate(date)}
+                locale={ptBR}
+                modifiers={{
+                  hasSchedule: datesWithSchedules,
+                  hasNote: datesWithNotes
+                }}
+                modifiersStyles={{
+                  hasSchedule: {
+                    backgroundColor: "hsl(var(--primary) / 0.1)",
+                    fontWeight: "bold"
+                  }
+                }}
+                modifiersClassNames={{
+                  hasNote: "calendar-has-note"
+                }}
+                className="rounded-md border"
+              />
 
-            {/* Legend */}
-            <div className="mt-4 pt-4 border-t space-y-2">
-              <p className="text-sm font-medium text-muted-foreground">Legenda:</p>
-              <div className="flex flex-col gap-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <GraduationCap className="w-4 h-4 text-primary" />
-                  <span>Escala de Aulas</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Instagram className="w-4 h-4 text-pink-500" />
-                  <span>Escala de Postagens</span>
+              {/* Legend */}
+              <div className="mt-4 pt-4 border-t space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Legenda:</p>
+                <div className="flex flex-col gap-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <GraduationCap className="w-4 h-4 text-primary" />
+                    <span>Escala de Aulas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Instagram className="w-4 h-4 text-pink-500" />
+                    <span>Escala de Postagens</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <StickyNote className="w-4 h-4 text-amber-500" />
+                    <span>Minhas Anotações</span>
+                  </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Schedules List */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-outfit text-xl font-semibold">
+                {format(selectedDate, "d 'de' MMMM", { locale: ptBR })}
+              </h2>
+              <Badge variant="outline">
+                {schedulesForSelectedDate.length} escala(s)
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Schedules List */}
-        <div className="lg:col-span-2 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-outfit text-xl font-semibold">
-              {format(selectedDate, "d 'de' MMMM", { locale: ptBR })}
-            </h2>
-            <Badge variant="outline">
-              {schedulesForSelectedDate.length} escala(s)
-            </Badge>
-          </div>
+            {schedulesForSelectedDate.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>Nenhuma escala para este dia</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {schedulesForSelectedDate.map((schedule) => (
+                  <ScheduleDetailCard
+                    key={schedule.schedule_id}
+                    schedule={schedule}
+                    members={members}
+                    onConfirm={handleConfirmAttendance}
+                    onEdit={handleEditSchedule}
+                    onDelete={handleDeleteClick}
+                    onRequestSwap={handleOpenSwapDialog}
+                    currentUserMemberId={currentUserMember?.member_id}
+                    isAdmin={isAdmin}
+                    scheduleTypes={scheduleTypes}
+                  />
+                ))}
+              </div>
+            )}
 
-          {schedulesForSelectedDate.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Nenhuma escala para este dia</p>
+            {/* Calendar Notes for selected date */}
+            <Card className="border-amber-200/50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StickyNote className="w-5 h-5 text-amber-500" />
+                    <CardTitle className="font-outfit text-lg">Minhas Anotações</CardTitle>
+                    <Badge variant="outline">{notesForSelectedDate.length}</Badge>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                    onClick={() => handleOpenNoteDialog(selectedDate)}
+                    data-testid="add-note-btn"
+                  >
+                    <Plus className="w-4 h-4 mr-1" />
+                    Nova Anotação
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {notesForSelectedDate.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <StickyNote className="w-10 h-10 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm">Nenhuma anotação para este dia</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {notesForSelectedDate.map((note) => (
+                      <div
+                        key={note.note_id}
+                        className={`p-3 rounded-lg border ${getNoteColorClasses(note.color)}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <div className={`w-3 h-3 rounded-full mt-1 flex-shrink-0 ${getNoteColorDot(note.color)}`} />
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-sm">{note.title}</h4>
+                              {note.content && (
+                                <p className="text-sm mt-1 opacity-80 whitespace-pre-wrap">{note.content}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 opacity-70 hover:opacity-100"
+                              onClick={() => handleEditNote(note)}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-red-500 opacity-70 hover:opacity-100"
+                              onClick={() => handleDeleteNote(note.note_id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-4">
-              {schedulesForSelectedDate.map((schedule) => (
-                <ScheduleDetailCard
-                  key={schedule.schedule_id}
-                  schedule={schedule}
-                  members={members}
-                  onConfirm={handleConfirmAttendance}
-                  onDelete={handleDeleteClick}
-                  currentUserMemberId={currentUserMember?.member_id}
-                  isAdmin={isAdmin}
-                />
-              ))}
-            </div>
-          )}
+          </div>
         </div>
-      </div>
       )}
 
       {/* Delete Confirmation Dialog */}
@@ -1192,7 +1883,7 @@ export default function SchedulesPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={handleDeleteSchedule}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               data-testid="confirm-delete-schedule"
@@ -1202,6 +1893,149 @@ export default function SchedulesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Swap Request Dialog */}
+      <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit flex items-center gap-2">
+              <ArrowRightLeft className="w-5 h-5 text-amber-600" />
+              Solicitar Troca de Escala
+              {swapRequesterMemberId && swapRequesterMemberId !== currentUserMember?.member_id && (
+                <span className="text-sm font-normal text-muted-foreground">
+                  para {members.find(m => m.member_id === swapRequesterMemberId)?.name}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedScheduleForSwap && (
+            <div className="space-y-4 py-4">
+              <div className="p-3 bg-muted rounded-lg">
+                <p className="font-medium">{selectedScheduleForSwap.title}</p>
+                <p className="text-sm text-muted-foreground">
+                  {format(parseISO(selectedScheduleForSwap.date), "EEEE, d 'de' MMMM", { locale: ptBR })}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedScheduleForSwap.start_time} - {selectedScheduleForSwap.end_time}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Motivo da troca *</Label>
+                <Textarea
+                  placeholder="Ex: Tenho um compromisso médico nesse horário..."
+                  value={swapReason}
+                  onChange={(e) => setSwapReason(e.target.value)}
+                  data-testid="swap-reason-input"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Pedir para alguém específico? (opcional)</Label>
+                <Select value={swapTargetMember} onValueChange={setSwapTargetMember}>
+                  <SelectTrigger data-testid="swap-target-select">
+                    <SelectValue placeholder="Qualquer pessoa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="any">Qualquer pessoa</SelectItem>
+                    {members
+                      .filter(m => m.member_id !== currentUserMember?.member_id && m.active)
+                      .map((member) => (
+                        <SelectItem key={member.member_id} value={member.member_id}>
+                          {member.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Se não selecionar, qualquer membro pode aceitar sua troca
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancelar</Button>
+            </DialogClose>
+            <Button
+              onClick={handleCreateSwapRequest}
+              disabled={!swapReason.trim()}
+              className="bg-amber-600 hover:bg-amber-700"
+              data-testid="submit-swap-btn"
+            >
+              <ArrowRightLeft className="w-4 h-4 mr-2" />
+              Solicitar Troca
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Calendar Note Dialog */}
+      <Dialog open={noteDialogOpen} onOpenChange={setNoteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit flex items-center gap-2">
+              <StickyNote className="w-5 h-5 text-amber-500" />
+              {editingNote ? "Editar Anotação" : "Nova Anotação"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+              📅 {format(parseISO(noteFormData.date), "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Título *</Label>
+              <Input
+                placeholder="Ex: Reunião com equipe, Comprar material..."
+                value={noteFormData.title}
+                onChange={(e) => setNoteFormData({ ...noteFormData, title: e.target.value })}
+                data-testid="note-title-input"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Descrição (opcional)</Label>
+              <Textarea
+                placeholder="Detalhes da anotação..."
+                value={noteFormData.content}
+                onChange={(e) => setNoteFormData({ ...noteFormData, content: e.target.value })}
+                rows={3}
+                data-testid="note-content-input"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cor</Label>
+              <div className="flex gap-2">
+                {noteColors.map((color) => (
+                  <button
+                    key={color.value}
+                    type="button"
+                    className={`w-8 h-8 rounded-full ${color.bg} transition-all ${noteFormData.color === color.value ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "opacity-60 hover:opacity-100"}`}
+                    onClick={() => setNoteFormData({ ...noteFormData, color: color.value })}
+                    title={color.label}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancelar</Button>
+            </DialogClose>
+            <Button
+              onClick={handleSaveNote}
+              disabled={!noteFormData.title.trim()}
+              className="bg-amber-600 hover:bg-amber-700"
+              data-testid="save-note-btn"
+            >
+              <StickyNote className="w-4 h-4 mr-2" />
+              {editingNote ? "Salvar" : "Criar Anotação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

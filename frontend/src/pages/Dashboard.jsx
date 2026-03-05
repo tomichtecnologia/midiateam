@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,15 +25,27 @@ import {
   AlertTriangle,
   UserPlus,
   ArrowRightLeft,
-  Bell
+  Bell,
+  BookOpen,
+  Plus,
+  Trash2,
+  GripVertical,
+  Pencil,
+  StickyNote,
+  Megaphone,
+  Eye,
+  Check,
+  ClipboardCheck,
+  ListChecks
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { format, parseISO, isPast, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
+import { getAvatarUrl } from "@/lib/utils";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
 const StatCard = ({ title, value, icon: Icon, trend, color }) => (
@@ -96,7 +109,7 @@ const ScheduleCard = ({ schedule, members }) => {
             const isConfirmed = schedule.confirmed_members?.includes(memberId);
             return (
               <Avatar key={memberId} className={`w-8 h-8 border-2 ${isConfirmed ? "border-green-500" : "border-background"}`}>
-                <AvatarImage src={member?.picture} />
+                <AvatarImage src={getAvatarUrl(member?.picture)} />
                 <AvatarFallback className="text-xs bg-muted">
                   {member?.name?.charAt(0) || "?"}
                 </AvatarFallback>
@@ -207,7 +220,7 @@ const MyScheduleCard = ({ schedule, currentMemberId, onConfirm, onDecline, onReq
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
           <Clock className="w-4 h-4" />
           <span>{schedule.start_time} - {schedule.end_time}</span>
@@ -286,7 +299,7 @@ const SwapRequestCard = ({ request, onAccept, onCancel }) => {
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <Avatar className="w-10 h-10">
-            <AvatarImage src={request.requester_picture} />
+            <AvatarImage src={getAvatarUrl(request.requester_picture)} />
             <AvatarFallback>{request.requester_name?.charAt(0)}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
@@ -335,17 +348,35 @@ export default function Dashboard() {
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  
+
   // New states for my schedules and swaps
   const [mySchedules, setMySchedules] = useState([]);
   const [swapRequests, setSwapRequests] = useState([]);
   const [currentMember, setCurrentMember] = useState(null);
-  
+
   // Swap dialog state
   const [swapDialogOpen, setSwapDialogOpen] = useState(false);
   const [selectedScheduleForSwap, setSelectedScheduleForSwap] = useState(null);
   const [swapReason, setSwapReason] = useState("");
   const [swapTargetMember, setSwapTargetMember] = useState("");
+
+  // Rules state
+  const [rules, setRules] = useState([]);
+  const [rulesUpdatedBy, setRulesUpdatedBy] = useState(null);
+  const [rulesDialogOpen, setRulesDialogOpen] = useState(false);
+  const [editingRules, setEditingRules] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Announcements state
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
+  const [newAnnouncement, setNewAnnouncement] = useState({
+    title: "", content: "", type: "general", target_sector: "", priority: "normal"
+  });
+  const [departments, setDepartments] = useState([]);
+
+  // Checklists state
+  const [myChecklists, setMyChecklists] = useState([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -353,14 +384,15 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [statsRes, schedulesRes, approvalsRes, membersRes, mySchedulesRes, swapRes, userRes] = await Promise.all([
+      const [statsRes, schedulesRes, approvalsRes, membersRes, mySchedulesRes, swapRes, userRes, rulesRes] = await Promise.all([
         axios.get(`${API}/dashboard/stats`, { withCredentials: true }),
         axios.get(`${API}/dashboard/upcoming`, { withCredentials: true }),
         axios.get(`${API}/dashboard/pending-approvals`, { withCredentials: true }),
         axios.get(`${API}/members`, { withCredentials: true }),
         axios.get(`${API}/my-schedules`, { withCredentials: true }),
         axios.get(`${API}/schedules/swap-requests?status=pending`, { withCredentials: true }),
-        axios.get(`${API}/auth/me`, { withCredentials: true })
+        axios.get(`${API}/auth/me`, { withCredentials: true }),
+        axios.get(`${API}/rules`, { withCredentials: true })
       ]);
 
       setStats(statsRes.data);
@@ -369,10 +401,37 @@ export default function Dashboard() {
       setMembers(membersRes.data);
       setMySchedules(mySchedulesRes.data);
       setSwapRequests(swapRes.data);
-      
+
+      // Rules
+      const rulesData = rulesRes.data;
+      setRules(rulesData.rules || []);
+      if (rulesData.updated_by) {
+        const updater = membersRes.data.find(m => m.user_id === rulesData.updated_by);
+        setRulesUpdatedBy(updater?.name || "Admin");
+      }
+
       // Find current member
       const member = membersRes.data.find(m => m.user_id === userRes.data.user_id);
       setCurrentMember(member);
+      setIsAdmin(userRes.data.is_admin || userRes.data.role === "superadmin" || member?.is_admin || false);
+
+      // Fetch announcements
+      try {
+        const annRes = await axios.get(`${API}/announcements`, { withCredentials: true });
+        setAnnouncements(annRes.data);
+      } catch (e) { console.error("Error fetching announcements:", e); }
+
+      // Fetch my checklists
+      try {
+        const chkRes = await axios.get(`${API}/checklist-assignments/my`, { withCredentials: true });
+        setMyChecklists(chkRes.data);
+      } catch (e) { console.error("Error fetching checklists:", e); }
+
+      // Fetch departments for announcement form
+      try {
+        const configRes = await axios.get(`${API}/entities/current/config`, { withCredentials: true });
+        setDepartments(configRes.data.custom_departments || []);
+      } catch (e) { console.error("Error fetching config:", e); }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -422,7 +481,7 @@ export default function Dashboard() {
       toast.error("Informe o motivo da troca");
       return;
     }
-    
+
     try {
       await axios.post(
         `${API}/schedules/swap-request`,
@@ -469,9 +528,42 @@ export default function Dashboard() {
   };
 
   // Filter swap requests - show those I can accept or my own pending
-  const relevantSwapRequests = swapRequests.filter(r => 
+  const relevantSwapRequests = swapRequests.filter(r =>
     r.can_accept || (r.is_mine && r.status === "pending")
   );
+
+  // ============== RULES HANDLERS ==============
+  const handleOpenRulesDialog = () => {
+    setEditingRules(rules.length > 0 ? [...rules] : [{ title: "", content: "", order: 0, active: true }]);
+    setRulesDialogOpen(true);
+  };
+
+  const handleAddRule = () => {
+    setEditingRules([...editingRules, { title: "", content: "", order: editingRules.length, active: true }]);
+  };
+
+  const handleRemoveRule = (index) => {
+    setEditingRules(editingRules.filter((_, i) => i !== index));
+  };
+
+  const handleRuleChange = (index, field, value) => {
+    const updated = [...editingRules];
+    updated[index] = { ...updated[index], [field]: value };
+    setEditingRules(updated);
+  };
+
+  const handleSaveRules = async () => {
+    const validRules = editingRules.filter(r => r.title.trim());
+    try {
+      await axios.put(`${API}/rules`, { rules: validRules }, { withCredentials: true });
+      toast.success("Regras atualizadas com sucesso!");
+      setRulesDialogOpen(false);
+      fetchDashboardData();
+    } catch (error) {
+      console.error("Error saving rules:", error);
+      toast.error("Erro ao salvar regras");
+    }
+  };
 
   if (loading) {
     return (
@@ -605,6 +697,88 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* My Checklists Section */}
+      {myChecklists.length > 0 && (
+        <Card data-testid="my-checklists-card" className="border-teal-200 bg-gradient-to-br from-teal-50/30 to-transparent">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="w-5 h-5 text-teal-600" />
+                <CardTitle className="font-outfit text-lg">Minhas Checklists</CardTitle>
+                <Badge className="bg-teal-500">{myChecklists.length}</Badge>
+              </div>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to="/checklists">
+                  Ver todas
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {myChecklists.slice(0, 6).map((checklist) => {
+                const totalItems = checklist.items?.length || 0;
+                const doneItems = checklist.items?.filter(i => i.done).length || 0;
+                const progress = totalItems > 0 ? (doneItems / totalItems) * 100 : 0;
+                return (
+                  <Card key={checklist.assignment_id} className="card-hover">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-sm">{checklist.checklist_title}</h4>
+                        <Badge variant={progress === 100 ? "default" : "outline"} className="text-xs">
+                          {doneItems}/{totalItems}
+                        </Badge>
+                      </div>
+                      {checklist.schedule_title && (
+                        <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {checklist.schedule_title}
+                          {checklist.schedule_date && ` — ${format(parseISO(checklist.schedule_date), "dd/MM", { locale: ptBR })}`}
+                        </p>
+                      )}
+                      <Progress value={progress} className={`h-2 mb-3 ${progress === 100 ? "[&>div]:bg-green-500" : ""}`} />
+                      <div className="space-y-1.5">
+                        {checklist.items?.map((item) => (
+                          <button
+                            key={item.item_id}
+                            className={`w-full flex items-center gap-2 p-1.5 rounded text-xs text-left transition-all ${item.done
+                                ? "text-green-600 line-through opacity-60"
+                                : "text-foreground hover:bg-muted"
+                              }`}
+                            onClick={async () => {
+                              try {
+                                const res = await axios.put(
+                                  `${API}/checklist-assignments/${checklist.assignment_id}/toggle-item`,
+                                  { item_id: item.item_id, done: !item.done },
+                                  { withCredentials: true }
+                                );
+                                if (res.data.just_completed) {
+                                  toast.success("🎉 Checklist concluída! +10 pontos!", { duration: 5000 });
+                                }
+                                fetchDashboardData();
+                              } catch (err) {
+                                toast.error(err.response?.data?.detail || "Erro");
+                              }
+                            }}
+                          >
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${item.done ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground/30"
+                              }`}>
+                              {item.done && <Check className="w-2.5 h-2.5" />}
+                            </div>
+                            <span>{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upcoming Schedules */}
@@ -670,6 +844,195 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* Announcements / Avisos */}
+      <Card data-testid="announcements-card" className="border-orange-200/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
+                <Megaphone className="w-4 h-4 text-orange-600" />
+              </div>
+              <div>
+                <CardTitle className="font-outfit text-lg">Avisos</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Comunicados da organização</p>
+              </div>
+            </div>
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setNewAnnouncement({ title: "", content: "", type: "general", target_sector: "", priority: "normal" });
+                  setAnnouncementDialogOpen(true);
+                }}
+                className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Novo Aviso
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {announcements.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nenhum aviso no momento</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {announcements.map((ann) => {
+                const hasRead = ann.read_by?.some(r => r.user_id === currentMember?.user_id);
+                const readCount = ann.read_by?.length || 0;
+                const totalMembers = members.length;
+                return (
+                  <div
+                    key={ann.announcement_id}
+                    className={`p-4 rounded-lg border ${ann.priority === 'urgent' ? 'border-red-300 bg-red-50/80' :
+                      ann.priority === 'important' ? 'border-amber-300 bg-amber-50/80' :
+                        'border-gray-200 bg-gray-50/50'
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-semibold text-sm">{ann.title}</h4>
+                          {ann.type === 'sector' && (
+                            <Badge variant="outline" className="text-xs">{ann.target_sector}</Badge>
+                          )}
+                          {ann.priority === 'urgent' && (
+                            <Badge variant="destructive" className="text-xs">Urgente</Badge>
+                          )}
+                          {ann.priority === 'important' && (
+                            <Badge className="bg-amber-500 text-xs">Importante</Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ann.content}</p>
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-xs text-muted-foreground">
+                            {ann.created_by_name} • {readCount}/{totalMembers} leram
+                          </span>
+                          <div className="flex-1 max-w-[120px]">
+                            <Progress value={(readCount / Math.max(totalMembers, 1)) * 100} className="h-1.5" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        {hasRead ? (
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
+                            <Check className="w-3 h-3 mr-1" />
+                            Lido
+                          </Badge>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                            onClick={async () => {
+                              try {
+                                await axios.post(`${API}/announcements/${ann.announcement_id}/read`, {}, { withCredentials: true });
+                                toast.success("Leitura confirmada!");
+                                fetchDashboardData();
+                              } catch (e) {
+                                toast.error("Erro ao confirmar");
+                              }
+                            }}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            Li e estou de acordo
+                          </Button>
+                        )}
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 text-red-400 hover:text-red-600"
+                            onClick={async () => {
+                              try {
+                                await axios.delete(`${API}/announcements/${ann.announcement_id}`, { withCredentials: true });
+                                toast.success("Aviso excluído!");
+                                fetchDashboardData();
+                              } catch (e) {
+                                toast.error("Erro ao excluir");
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Rules Board */}
+      <Card data-testid="rules-board-card" className="border-blue-200/50">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                <BookOpen className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <CardTitle className="font-outfit text-lg">Regras da Organização</CardTitle>
+                {rulesUpdatedBy && (
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Atualizado por {rulesUpdatedBy}
+                  </p>
+                )}
+              </div>
+            </div>
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleOpenRulesDialog}
+                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                data-testid="edit-rules-btn"
+              >
+                <Pencil className="w-4 h-4 mr-1" />
+                Editar
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {rules.filter(r => r.active !== false).length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nenhuma regra definida</p>
+              {isAdmin && (
+                <p className="text-sm mt-1">Clique em "Editar" para adicionar regras</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {rules.filter(r => r.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)).map((rule, index) => (
+                <div
+                  key={index}
+                  className="flex items-start gap-3 p-3 rounded-lg bg-gradient-to-r from-blue-50/80 to-indigo-50/50 border border-blue-100/60"
+                >
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold mt-0.5">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-sm text-foreground">{rule.title}</h4>
+                    {rule.content && (
+                      <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{rule.content}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Swap Request Dialog */}
       <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
         <DialogContent className="max-w-md">
@@ -728,7 +1091,7 @@ export default function Dashboard() {
             <DialogClose asChild>
               <Button variant="outline">Cancelar</Button>
             </DialogClose>
-            <Button 
+            <Button
               onClick={handleCreateSwapRequest}
               disabled={!swapReason.trim()}
               className="bg-amber-600 hover:bg-amber-700"
@@ -736,6 +1099,174 @@ export default function Dashboard() {
             >
               <ArrowRightLeft className="w-4 h-4 mr-2" />
               Solicitar Troca
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rules Edit Dialog */}
+      <Dialog open={rulesDialogOpen} onOpenChange={setRulesDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-outfit flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-blue-600" />
+              Editar Regras da Organização
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Defina as regras e diretrizes para os membros da sua organização.
+            </p>
+            {editingRules.map((rule, index) => (
+              <div key={index} className="p-3 border rounded-lg space-y-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold">
+                      {index + 1}
+                    </div>
+                    <span className="text-sm font-medium text-muted-foreground">Regra {index + 1}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                    onClick={() => handleRemoveRule(index)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+                <Input
+                  placeholder="Título da regra (ex: Horário de chegada)"
+                  value={rule.title}
+                  onChange={(e) => handleRuleChange(index, "title", e.target.value)}
+                  className="font-medium"
+                />
+                <Textarea
+                  placeholder="Descrição detalhada (opcional)"
+                  value={rule.content || ""}
+                  onChange={(e) => handleRuleChange(index, "content", e.target.value)}
+                  rows={2}
+                />
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              className="w-full border-dashed border-blue-300 text-blue-600 hover:bg-blue-50"
+              onClick={handleAddRule}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Adicionar Regra
+            </Button>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancelar</Button>
+            </DialogClose>
+            <Button
+              onClick={handleSaveRules}
+              className="bg-blue-600 hover:bg-blue-700"
+              data-testid="save-rules-btn"
+            >
+              <CheckCircle className="w-4 h-4 mr-2" />
+              Salvar Regras
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Announcement Dialog */}
+      <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-outfit flex items-center gap-2">
+              <Megaphone className="w-5 h-5 text-orange-500" />
+              Novo Aviso
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Título *</Label>
+              <Input
+                placeholder="Ex: Reunião geral na sexta"
+                value={newAnnouncement.title}
+                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Mensagem *</Label>
+              <Textarea
+                placeholder="Descreva o aviso..."
+                value={newAnnouncement.content}
+                onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select
+                  value={newAnnouncement.type}
+                  onValueChange={(v) => setNewAnnouncement({ ...newAnnouncement, type: v })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="general">Geral (todos)</SelectItem>
+                    <SelectItem value="sector">Por Setor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Prioridade</Label>
+                <Select
+                  value={newAnnouncement.priority}
+                  onValueChange={(v) => setNewAnnouncement({ ...newAnnouncement, priority: v })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="important">Importante</SelectItem>
+                    <SelectItem value="urgent">Urgente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {newAnnouncement.type === "sector" && (
+              <div className="space-y-2">
+                <Label>Setor de destino</Label>
+                <Select
+                  value={newAnnouncement.target_sector}
+                  onValueChange={(v) => setNewAnnouncement({ ...newAnnouncement, target_sector: v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Selecione o setor" /></SelectTrigger>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancelar</Button>
+            </DialogClose>
+            <Button
+              disabled={!newAnnouncement.title.trim() || !newAnnouncement.content.trim() || (newAnnouncement.type === 'sector' && !newAnnouncement.target_sector)}
+              className="bg-orange-600 hover:bg-orange-700"
+              onClick={async () => {
+                try {
+                  await axios.post(`${API}/announcements`, newAnnouncement, { withCredentials: true });
+                  toast.success("Aviso criado!");
+                  setAnnouncementDialogOpen(false);
+                  fetchDashboardData();
+                } catch (e) {
+                  toast.error("Erro ao criar aviso");
+                }
+              }}
+            >
+              <Megaphone className="w-4 h-4 mr-2" />
+              Publicar Aviso
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -18,9 +18,12 @@ import ApprovalsPage from "@/pages/ApprovalsPage";
 import LinksPage from "@/pages/LinksPage";
 import SettingsPage from "@/pages/SettingsPage";
 import GamificationPage from "@/pages/GamificationPage";
+import ReportsPage from "@/pages/ReportsPage";
+import ChecklistsPage from "@/pages/ChecklistsPage";
 import SidebarLayout from "@/components/SidebarLayout";
+import CoffeeSupport from "@/components/CoffeeSupport";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
 // Protected Route Component
@@ -29,8 +32,13 @@ const ProtectedRoute = ({ children }) => {
   const [user, setUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const authChecked = useRef(false);
 
   useEffect(() => {
+    // Only check auth once per mount
+    if (authChecked.current) return;
+    authChecked.current = true;
+
     // Skip if user data passed from login
     if (location.state?.user) {
       setUser(location.state.user);
@@ -54,7 +62,8 @@ const ProtectedRoute = ({ children }) => {
     };
 
     checkAuth();
-  }, [location, navigate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (isAuthenticated === null) {
     return (
@@ -81,7 +90,7 @@ function AppRouter() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
-      
+
       {/* Protected Routes */}
       <Route
         path="/dashboard"
@@ -96,6 +105,14 @@ function AppRouter() {
         element={
           <ProtectedRoute>
             <SchedulesPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/checklists"
+        element={
+          <ProtectedRoute>
+            <ChecklistsPage />
           </ProtectedRoute>
         }
       />
@@ -139,7 +156,15 @@ function AppRouter() {
           </ProtectedRoute>
         }
       />
-      
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute>
+            <ReportsPage />
+          </ProtectedRoute>
+        }
+      />
+
       {/* Catch all - redirect to home */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
@@ -153,6 +178,7 @@ function App() {
         <AppRouter />
       </BrowserRouter>
       <Toaster richColors position="top-right" />
+      <CoffeeSupport />
     </div>
   );
 }
