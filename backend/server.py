@@ -3781,6 +3781,7 @@ async def create_checklist_template(data: ChecklistTemplateCreate, user: User = 
     doc = template.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.checklist_templates.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 @api_router.put("/checklist-templates/{template_id}")
@@ -3938,6 +3939,7 @@ async def create_checklist_assignment(data: ChecklistAssignmentCreate, schedule_
     doc = assignment.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     await db.checklist_assignments.insert_one(doc)
+    doc.pop("_id", None)
     return doc
 
 @api_router.post("/schedules/{schedule_id}/checklists")

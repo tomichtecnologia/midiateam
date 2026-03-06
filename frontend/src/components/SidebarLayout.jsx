@@ -66,6 +66,7 @@ const SidebarContent = ({ user, pathname, onLogout, onClose }) => {
   const [loadingCreate, setLoadingCreate] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [loadingDelete, setLoadingDelete] = useState(false);
+  const [memberProfile, setMemberProfile] = useState(null);
 
   useEffect(() => {
     if (user) {
@@ -88,6 +89,30 @@ const SidebarContent = ({ user, pathname, onLogout, onClose }) => {
         .catch(console.error);
     }
   }, [user]);
+
+  // Fetch member profile for visibility rules
+  useEffect(() => {
+    if (user) {
+      Promise.all([
+        axios.get(`${API}/auth/me`, { withCredentials: true }),
+        axios.get(`${API}/members`, { withCredentials: true })
+      ]).then(([meRes, membersRes]) => {
+        const me = meRes.data;
+        const myMember = membersRes.data.find(m => m.user_id === me.user_id);
+        setMemberProfile({ ...me, ...myMember });
+      }).catch(() => setMemberProfile(null));
+    }
+  }, [user]);
+
+  // Filter nav items based on member permissions
+  const isAdmin = user?.is_admin || user?.role === "superadmin" || memberProfile?.is_admin;
+  const canVote = isAdmin || memberProfile?.can_vote;
+  const filteredNavItems = navItems.filter(item => {
+    if (item.path === "/approvals" && !canVote) return false;
+    if (item.path === "/reports" && !isAdmin) return false;
+    if (item.path === "/settings" && !isAdmin) return false;
+    return true;
+  });
 
   const handleEntityChange = async (val) => {
     if (val === 'add-new') {
@@ -208,7 +233,7 @@ const SidebarContent = ({ user, pathname, onLogout, onClose }) => {
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-4">
         <nav className="space-y-1">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = pathname === item.path;
             const Icon = item.icon;
             return (
