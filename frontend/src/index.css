@@ -172,3 +172,11 @@ code {
     min-width: 48px;
   }
 }
+
+/* Hide emergent badge */
+#emergent-badge, [id*="emergent-badge"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}

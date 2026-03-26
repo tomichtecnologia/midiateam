@@ -45,7 +45,7 @@ import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
 const contentTypeIcons = {
@@ -73,7 +73,7 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
   const [showHistory, setShowHistory] = useState(false);
   const [responseText, setResponseText] = useState(approval.creator_response || "");
   const [isResponding, setIsResponding] = useState(false);
-  
+
   const ContentIcon = contentTypeIcons[approval.content_type] || FileText;
   const statusInfo = statusLabels[approval.status] || statusLabels.pending;
   const StatusIcon = statusInfo.icon;
@@ -84,12 +84,21 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
   const approvalPercentage = totalVotes > 0 ? (votesFor / totalVotes) * 100 : 0;
   const participationPercentage = totalVoters > 0 ? (totalVotes / totalVoters) * 100 : 0;
 
+  // Quorum calculation: more than 50% of voters must vote before decision is made
+  const quorum = Math.max(1, Math.ceil((totalVoters + 1) / 2));
+  const votesRemaining = Math.max(0, quorum - totalVotes);
+  const quorumReached = totalVotes >= quorum;
+
   const hasVotedFor = approval.votes_for?.includes(currentUserId);
   const hasVotedAgainst = approval.votes_against?.includes(currentUserId);
   const rejectionReasons = approval.rejection_reasons || [];
   const revisionHistory = approval.revision_history || [];
   const isCreator = approval.submitted_by === currentUserId;
   const revisionCount = approval.revision_count || 1;
+
+  // Get submitter name
+  const submitterMember = members.find(m => m.user_id === approval.submitted_by);
+  const submitterName = submitterMember?.name || "Desconhecido";
 
   // Get voter names
   const getVoterNames = (voterIds) => {
@@ -153,7 +162,7 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
                     Reiniciar Votação
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => onAdminAction(approval.approval_id, "delete")}
                     className="text-destructive"
                   >
@@ -192,7 +201,7 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
                     Reiniciar Votação
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem 
+                  <DropdownMenuItem
                     onClick={() => onAdminAction(approval.approval_id, "delete")}
                     className="text-destructive"
                   >
@@ -207,7 +216,17 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
       )}
 
       <CardContent className="p-5">
-        <h3 className="font-semibold text-lg mb-2">{approval.title}</h3>
+        <h3 className="font-semibold text-lg mb-1">{approval.title}</h3>
+        <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+          <Users className="w-3.5 h-3.5" />
+          <span>Enviado por <strong className="text-foreground">{submitterName}</strong></span>
+          {revisionCount > 1 && (
+            <Badge variant="outline" className="text-xs py-0 gap-1 border-amber-300 text-amber-700">
+              <RefreshCw className="w-3 h-3" />
+              {revisionCount}ª tentativa
+            </Badge>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground line-clamp-2 mb-4">
           {approval.description}
         </p>
@@ -231,15 +250,30 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
             </div>
           </div>
 
-          {/* Participation */}
-          <div className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded-lg">
-            <span className="flex items-center gap-2 text-muted-foreground">
-              <Users className="w-4 h-4" />
-              Participação
-            </span>
-            <span className="font-medium">
-              {totalVotes} de {totalVoters} votantes ({Math.round(participationPercentage)}%)
-            </span>
+          {/* Participation & Quorum */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded-lg">
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <Users className="w-4 h-4" />
+                Participação
+              </span>
+              <span className="font-medium">
+                {totalVotes} de {totalVoters} votantes ({Math.round(participationPercentage)}%)
+              </span>
+            </div>
+            {approval.status === "pending" && (
+              <div className={`flex items-center justify-between text-xs px-2 py-1.5 rounded-lg ${quorumReached ? "bg-green-50 text-green-700 border border-green-200" : "bg-amber-50 text-amber-700 border border-amber-200"}`}>
+                <span className="flex items-center gap-1.5">
+                  <Vote className="w-3.5 h-3.5" />
+                  Quorum: {quorum} voto{quorum > 1 ? "s" : ""} necessário{quorum > 1 ? "s" : ""}
+                </span>
+                <span className="font-semibold">
+                  {quorumReached
+                    ? "✓ Atingido — aguardando maioria"
+                    : `Falta${votesRemaining > 1 ? "m" : ""} ${votesRemaining} voto${votesRemaining > 1 ? "s" : ""}`}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Votes breakdown with names for admin */}
@@ -249,7 +283,9 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
                 <ThumbsUp className="w-3 h-3 text-green-500" />
                 {votesFor} a favor
               </span>
-              <span>50% necessário</span>
+              <span className={`font-medium ${quorumReached ? "text-green-600" : "text-amber-600"}`}>
+                {quorumReached ? "Maioria define resultado" : `${votesRemaining} voto${votesRemaining > 1 ? "s" : ""} p/ decidir`}
+              </span>
               <span className="flex items-center gap-1">
                 <ThumbsDown className="w-3 h-3 text-red-500" />
                 {votesAgainst} contra
@@ -263,9 +299,9 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
                   <div>
                     <span className="text-green-600 font-medium">A favor: </span>
                     {votersForNames.map((name, i) => (
-                      <Badge 
-                        key={i} 
-                        variant="outline" 
+                      <Badge
+                        key={i}
+                        variant="outline"
                         className="mr-1 mb-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
                         onClick={() => {
                           const userId = approval.votes_for[i];
@@ -281,9 +317,9 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
                   <div>
                     <span className="text-red-600 font-medium">Contra: </span>
                     {votersAgainstNames.map((name, i) => (
-                      <Badge 
-                        key={i} 
-                        variant="outline" 
+                      <Badge
+                        key={i}
+                        variant="outline"
                         className="mr-1 mb-1 cursor-pointer hover:bg-destructive hover:text-destructive-foreground"
                         onClick={() => {
                           const userId = approval.votes_against[i];
@@ -338,13 +374,13 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
               <Reply className="w-4 h-4" />
               Resposta às Correções
             </h4>
-            
+
             {approval.creator_response ? (
               <div className="space-y-3">
                 <p className="text-sm text-blue-700 bg-white p-3 rounded border border-blue-100">
                   {approval.creator_response}
                 </p>
-                <Button 
+                <Button
                   onClick={() => onRequestReevaluation(approval.approval_id)}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                   data-testid={`request-reevaluation-${approval.approval_id}`}
@@ -365,7 +401,7 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
                   className="min-h-[80px] bg-white"
                   data-testid={`creator-response-input-${approval.approval_id}`}
                 />
-                <Button 
+                <Button
                   onClick={handleSaveResponse}
                   disabled={!responseText.trim() || isResponding}
                   className="w-full"
@@ -467,11 +503,15 @@ const ApprovalCard = ({ approval, onVote, onReject, onAdminAction, onRespond, on
         )}
 
         {/* Metadata */}
-        <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
-          {approval.created_at && (
-            <span>
-              Enviado em {format(parseISO(approval.created_at), "d 'de' MMMM 'às' HH:mm", { locale: ptBR })}
-            </span>
+        <div className="mt-4 pt-4 border-t text-xs text-muted-foreground flex items-center justify-between">
+          <span>
+            {approval.created_at && (
+              <>Enviado em {format(parseISO(approval.created_at), "d 'de' MMMM 'às' HH:mm", { locale: ptBR })}</>
+            )}
+          </span>
+          {approval.content_url && (
+            <a href={approval.content_url} target="_blank" rel="noopener noreferrer"
+              className="text-primary hover:underline font-medium">Ver conteúdo →</a>
           )}
         </div>
       </CardContent>
@@ -487,7 +527,7 @@ export default function ApprovalsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [votingStats, setVotingStats] = useState({ total_voters: 0, can_vote: false, is_admin: false });
-  
+
   // State for rejection modal
   const [rejectingApprovalId, setRejectingApprovalId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState("");
@@ -579,7 +619,7 @@ export default function ApprovalsPage() {
       toast.error("Por favor, informe o motivo da rejeição");
       return;
     }
-    
+
     await handleVote(rejectingApprovalId, "against", rejectionReason.trim());
     setIsRejectDialogOpen(false);
     setRejectingApprovalId(null);
@@ -689,6 +729,7 @@ export default function ApprovalsPage() {
               <div>
                 <p className="text-sm font-medium text-green-700">Votantes</p>
                 <p className="text-xl font-bold text-green-600">{votingStats.total_voters}</p>
+                <p className="text-[10px] text-green-600/70">Quorum: {votingStats.quorum || Math.max(1, Math.ceil((votingStats.total_voters + 1) / 2))} votos</p>
               </div>
               {votingStats.can_vote && (
                 <Badge className="bg-green-600 ml-2">Você pode votar</Badge>
@@ -720,7 +761,7 @@ export default function ApprovalsPage() {
                 <div className="space-y-2">
                   <Label>Descrição</Label>
                   <Textarea
-                    placeholder="Descreva o conteúdo..."
+                    placeholder="Ex: Vídeo do culto de domingo enviado no grupo do Telegram"
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     data-testid="approval-description-input"
@@ -752,15 +793,6 @@ export default function ApprovalsPage() {
                     data-testid="approval-content-url-input"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>URL da Thumbnail</Label>
-                  <Input
-                    placeholder="https://..."
-                    value={formData.thumbnail_url}
-                    onChange={(e) => setFormData({ ...formData, thumbnail_url: e.target.value })}
-                    data-testid="approval-thumbnail-input"
-                  />
-                </div>
               </div>
               <DialogFooter>
                 <DialogClose asChild>
@@ -776,23 +808,27 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Info Alerts */}
-      {!votingStats.can_vote && !votingStats.is_admin && (
-        <Alert className="bg-amber-50 border-amber-200">
-          <AlertCircle className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-700">
-            Você não está habilitado para votar. Um administrador precisa ativar essa permissão.
-          </AlertDescription>
-        </Alert>
-      )}
+      {
+        !votingStats.can_vote && !votingStats.is_admin && (
+          <Alert className="bg-amber-50 border-amber-200">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-700">
+              Você não está habilitado para votar. Um administrador precisa ativar essa permissão.
+            </AlertDescription>
+          </Alert>
+        )
+      }
 
-      {votingStats.is_admin && (
-        <Alert className="bg-amber-50 border-amber-200">
-          <Shield className="h-4 w-4 text-amber-600" />
-          <AlertDescription className="text-amber-700">
-            <strong>Modo Admin:</strong> Você pode estornar votos (clique no nome do votante), reiniciar votações ou excluir aprovações usando o menu ⋮
-          </AlertDescription>
-        </Alert>
-      )}
+      {
+        votingStats.is_admin && (
+          <Alert className="bg-amber-50 border-amber-200">
+            <Shield className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-700">
+              <strong>Modo Admin:</strong> Você pode estornar votos (clique no nome do votante), reiniciar votações ou excluir aprovações usando o menu ⋮
+            </AlertDescription>
+          </Alert>
+        )
+      }
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -816,33 +852,35 @@ export default function ApprovalsPage() {
       </Tabs>
 
       {/* Approvals Grid */}
-      {filteredApprovals.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>Nenhum conteúdo {activeTab !== "all" ? statusLabels[activeTab]?.label.toLowerCase() : ""}</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredApprovals.map((approval) => (
-            <ApprovalCard
-              key={approval.approval_id}
-              approval={approval}
-              onVote={handleVote}
-              onReject={handleOpenRejectDialog}
-              onAdminAction={handleAdminAction}
-              onRespond={handleCreatorRespond}
-              onRequestReevaluation={handleRequestReevaluation}
-              currentUserId={currentUser?.user_id}
-              totalVoters={votingStats.total_voters}
-              canVote={votingStats.can_vote}
-              isAdmin={votingStats.is_admin}
-              members={members}
-            />
-          ))}
-        </div>
-      )}
+      {
+        filteredApprovals.length === 0 ? (
+          <Card>
+            <CardContent className="py-12 text-center text-muted-foreground">
+              <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>Nenhum conteúdo {activeTab !== "all" ? statusLabels[activeTab]?.label.toLowerCase() : ""}</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredApprovals.map((approval) => (
+              <ApprovalCard
+                key={approval.approval_id}
+                approval={approval}
+                onVote={handleVote}
+                onReject={handleOpenRejectDialog}
+                onAdminAction={handleAdminAction}
+                onRespond={handleCreatorRespond}
+                onRequestReevaluation={handleRequestReevaluation}
+                currentUserId={currentUser?.user_id}
+                totalVoters={votingStats.total_voters}
+                canVote={votingStats.can_vote}
+                isAdmin={votingStats.is_admin}
+                members={members}
+              />
+            ))}
+          </div>
+        )
+      }
 
       {/* Rejection Reason Dialog */}
       <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
@@ -870,13 +908,13 @@ export default function ApprovalsPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => setIsRejectDialogOpen(false)}
             >
               Cancelar
             </Button>
-            <Button 
+            <Button
               variant="destructive"
               onClick={handleSubmitRejection}
               disabled={!rejectionReason.trim()}
@@ -888,6 +926,6 @@ export default function ApprovalsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </div >
   );
 }

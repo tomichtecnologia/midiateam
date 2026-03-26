@@ -288,6 +288,7 @@ export default function ReportsPage() {
           <td style="padding:8px;border-bottom:1px solid #eee;">${s.start_time && s.end_time ? `${s.start_time} - ${s.end_time}` : "—"}</td>
           <td style="padding:8px;border-bottom:1px solid #eee;">${typeLabels[s.schedule_type] || s.schedule_type || "—"}</td>
           <td style="padding:8px;border-bottom:1px solid #eee;">${s.title || "—"}</td>
+          <td style="padding:8px;border-bottom:1px solid #eee;">${s.period || "—"}</td>
           <td style="padding:8px;border-bottom:1px solid #eee;">${names || "Nenhum"}</td>
         </tr>`;
             }).join("");
@@ -306,6 +307,7 @@ export default function ReportsPage() {
             <th style="padding:10px 8px;text-align:left;">Horário</th>
             <th style="padding:10px 8px;text-align:left;">Tipo</th>
             <th style="padding:10px 8px;text-align:left;">Título</th>
+            <th style="padding:10px 8px;text-align:left;">Período</th>
             <th style="padding:10px 8px;text-align:left;">Escalados</th>
           </tr></thead>
           <tbody>${rows}</tbody>
@@ -330,18 +332,19 @@ export default function ReportsPage() {
                     s.start_time && s.end_time ? `${s.start_time} - ${s.end_time}` : "—",
                     typeLabels[s.schedule_type] || s.schedule_type || "—",
                     s.title || "—",
+                    s.period || "—",
                     names || "Nenhum",
                 ];
             });
 
             autoTable(doc, {
                 startY: startY + 6,
-                head: [["Data", "Horário", "Tipo", "Título", "Escalados"]],
+                head: [["Data", "Horário", "Tipo", "Título", "Período", "Escalados"]],
                 body: tableData,
                 styles: { fontSize: 8, cellPadding: 3 },
                 headStyles: { fillColor: [139, 0, 0], textColor: [255, 255, 255], fontStyle: "bold" },
                 alternateRowStyles: { fillColor: [245, 245, 245] },
-                columnStyles: { 0: { cellWidth: 28 }, 1: { cellWidth: 28 }, 2: { cellWidth: 20 }, 3: { cellWidth: 40 }, 4: { cellWidth: "auto" } },
+                columnStyles: { 0: { cellWidth: 26 }, 1: { cellWidth: 26 }, 2: { cellWidth: 18 }, 3: { cellWidth: 38 }, 4: { cellWidth: 22 }, 5: { cellWidth: "auto" } },
                 margin: { left: 14, right: 14 },
             });
             addPdfFooter(doc);
@@ -386,9 +389,10 @@ export default function ReportsPage() {
                     memberStats[memberId] = { name: m?.name || "Desconhecido", roles: (m?.roles || []).join(", "), assigned: 0, confirmed: 0, absent: 0, pending: 0 };
                 }
                 memberStats[memberId].assigned++;
-                const status = (s.attendance || {})[memberId];
-                if (status === "confirmed") memberStats[memberId].confirmed++;
-                else if (status === "absent") memberStats[memberId].absent++;
+                const isConfirmed = (s.confirmed_members || []).includes(memberId);
+                const isDeclined = (s.declined_members || []).includes(memberId);
+                if (isConfirmed) memberStats[memberId].confirmed++;
+                else if (isDeclined) memberStats[memberId].absent++;
                 else memberStats[memberId].pending++;
             });
         });

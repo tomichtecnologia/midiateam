@@ -97,6 +97,12 @@ class Entity(BaseModel):
         {"value": "class", "label": "Aula", "icon": "graduation-cap", "color": "primary"},
         {"value": "content", "label": "Postagem", "icon": "instagram", "color": "pink"}
     ])
+    custom_periods: List[dict] = Field(default_factory=lambda: [
+        {"name": "1º Ano", "color": "blue"},
+        {"name": "2º Ano", "color": "green"},
+        {"name": "1º Tempo", "color": "purple"},
+        {"name": "2º Tempo", "color": "amber"}
+    ])
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class EntityCreate(BaseModel):
@@ -110,6 +116,7 @@ class EntityConfigUpdate(BaseModel):
     custom_roles: Optional[List[str]] = None
     custom_departments: Optional[List[str]] = None
     custom_schedule_types: Optional[List[dict]] = None
+    custom_periods: Optional[List[dict]] = None
 
 class User(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -138,7 +145,8 @@ class PendingRegistration(BaseModel):
     phone: Optional[str] = None
     password_hash: str
     roles: List[str] = Field(default_factory=lambda: ["Operador"])
-    department: str = "Produção"
+    department: str = "Produção"  # Legacy - mantido para compatibilidade
+    departments: List[str] = Field(default_factory=list)  # Múltiplos setores
     institution: Optional[str] = None  # Instituição/empresa do membro
     requested_entities: List[str] = Field(default_factory=list)  # Lista de entity_ids que o usuário quer entrar
     status: str = "pending"  # pending, approved, rejected
@@ -152,7 +160,8 @@ class RegistrationRequest(BaseModel):
     phone: Optional[str] = None
     password: str
     roles: List[str] = Field(default_factory=lambda: ["Operador"])
-    department: str = "Produção"
+    department: str = "Produção"  # Legacy
+    departments: List[str] = Field(default_factory=list)  # Múltiplos setores
     institution: Optional[str] = None  # Instituição/empresa
     requested_entities: List[str] = Field(default_factory=list)  # entity_ids escolhidos no cadastro
 
@@ -194,7 +203,8 @@ class Member(BaseModel):
     phone: Optional[str] = None
     picture: Optional[str] = None
     roles: List[str] = Field(default_factory=lambda: ["Operador"])
-    department: str = "Produção"
+    department: str = "Produção"  # Legacy - mantido para compatibilidade
+    departments: List[str] = Field(default_factory=list)  # Múltiplos setores
     active: bool = True
     is_admin: bool = False
     can_vote: bool = False
@@ -210,7 +220,8 @@ class MemberCreate(BaseModel):
     phone: Optional[str] = None
     picture: Optional[str] = None
     roles: List[str] = Field(default_factory=lambda: ["Operador"])
-    department: str = "Produção"
+    department: str = "Produção"  # Legacy
+    departments: List[str] = Field(default_factory=list)  # Múltiplos setores
     institution: Optional[str] = None
     is_admin: bool = False
     can_vote: bool = False
@@ -237,6 +248,7 @@ class Schedule(BaseModel):
     repeat_days: List[str] = []
     repeat_until: Optional[str] = None
     parent_schedule_id: Optional[str] = None
+    period: Optional[str] = None  # Período (ex: 1º Ano, 2º Tempo)
     created_by: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
@@ -252,6 +264,7 @@ class ScheduleCreate(BaseModel):
     repeat_type: str = "none"
     repeat_days: List[str] = []
     repeat_until: Optional[str] = None
+    period: Optional[str] = None
 
 class AttendanceConfirmation(BaseModel):
     schedule_id: str
@@ -283,6 +296,33 @@ class SwapRequestCreate(BaseModel):
 class SwapResponse(BaseModel):
     swap_id: str
     accept: bool
+
+# ============== CROSS-ORG RELEASE REQUEST ==============
+
+class ReleaseRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    request_id: str = Field(default_factory=lambda: f"release_{uuid.uuid4().hex[:12]}")
+    requesting_entity_id: str  # Org que quer o membro
+    requesting_entity_name: str = ""
+    target_entity_id: str  # Org que já tem o membro escalado
+    target_entity_name: str = ""
+    member_name: str
+    member_email: str = ""
+    requested_schedule_data: dict = Field(default_factory=dict)  # Dados da escala solicitada
+    conflict_schedule_ids: List[str] = []  # IDs das escalas conflitantes
+    conflict_schedule_titles: List[str] = []  # Títulos para exibir
+    conflict_date: str = ""
+    conflict_time: str = ""
+    status: str = "pending"  # pending, approved, denied
+    requested_by: str = ""  # user_id do admin solicitante
+    responded_by: Optional[str] = None
+    response_note: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    responded_at: Optional[str] = None
+
+class ReleaseRequestCreate(BaseModel):
+    conflicts: List[dict]  # Lista de conflitos retornados pelo backend
+    schedule_data: dict  # Dados da escala que quer criar
 
 class RejectionReason(BaseModel):
     user_id: str
@@ -1590,10 +1630,19 @@ async def get_entity_config(user: User = Depends(get_current_user)):
     ]
     configured_schedule_types = entity.get("custom_schedule_types", default_schedule_types)
     
+    default_periods = [
+        {"name": "1º Ano", "color": "blue"},
+        {"name": "2º Ano", "color": "green"},
+        {"name": "1º Tempo", "color": "purple"},
+        {"name": "2º Tempo", "color": "amber"}
+    ]
+    configured_periods = entity.get("custom_periods", default_periods)
+    
     return {
         "custom_roles": all_roles,
         "custom_departments": all_depts,
-        "custom_schedule_types": configured_schedule_types
+        "custom_schedule_types": configured_schedule_types,
+        "custom_periods": configured_periods
     }
 
 @api_router.put("/entities/current/config")
@@ -1829,6 +1878,8 @@ async def create_member(member_data: MemberCreate, user: User = Depends(get_curr
             await db.registered_users.insert_one(new_user)
             logger.info(f"Admin {user.email} criou conta de login para {member_data.email}")
     
+    # Montar lista de departments: se veio departments usa, senão usa department como fallback
+    final_departments = member_data.departments if member_data.departments else ([member_data.department] if member_data.department else ["Produção"])
     member = Member(
         user_id=user_id,
         entity_id=entity_id,
@@ -1836,7 +1887,8 @@ async def create_member(member_data: MemberCreate, user: User = Depends(get_curr
         email=member_data.email,
         phone=member_data.phone,
         roles=member_data.roles,
-        department=member_data.department,
+        department=final_departments[0] if final_departments else "Produção",
+        departments=final_departments,
         institution=member_data.institution,
         is_admin=member_data.is_admin,
         can_vote=member_data.can_vote,
@@ -1881,9 +1933,16 @@ async def update_member(member_id: str, request: Request, user: User = Depends(g
     
     # Campos editáveis
     update_data = {}
-    for field in ["name", "email", "phone", "roles", "department", "is_admin", "can_vote", "institution", "picture"]:
+    for field in ["name", "email", "phone", "roles", "department", "departments", "is_admin", "can_vote", "institution", "picture"]:
         if field in data:
             update_data[field] = data[field]
+    
+    # Se veio departments, atualizar department (legacy) com o primeiro valor
+    if "departments" in data and data["departments"]:
+        update_data["department"] = data["departments"][0]
+    elif "department" in data and data["department"]:
+        # Se veio apenas department (legacy), criar departments como lista
+        update_data["departments"] = [data["department"]]
     
     # SuperAdmin pode mover para outra entidade
     if user.is_superadmin and "entity_id" in data:
@@ -2448,7 +2507,7 @@ async def get_schedule(schedule_id: str, user: User = Depends(get_current_user))
     return schedule
 
 @api_router.post("/schedules")
-async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(get_current_user)):
+async def create_schedule(schedule_data: ScheduleCreate, force: bool = False, user: User = Depends(get_current_user)):
     entity_id = await get_current_entity_id(user)
     
     # Apenas admin pode criar escala
@@ -2488,7 +2547,9 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
             
             if should_create:
                 instance_deadline = current_date - timedelta(days=1)
+                is_first = (current_date == schedule_date)
                 instance = Schedule(
+                    schedule_id=parent_id if is_first else f"schedule_{uuid.uuid4().hex[:12]}",
                     entity_id=entity_id,
                     title=schedule_data.title,
                     description=schedule_data.description,
@@ -2502,7 +2563,8 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
                     repeat_type=schedule_data.repeat_type,
                     repeat_days=schedule_data.repeat_days,
                     repeat_until=schedule_data.repeat_until,
-                    parent_schedule_id=parent_id if current_date != schedule_date else None,
+                    period=schedule_data.period,
+                    parent_schedule_id=None if is_first else parent_id,
                     created_by=user.user_id
                 )
                 doc = instance.model_dump()
@@ -2523,11 +2585,247 @@ async def create_schedule(schedule_data: ScheduleCreate, user: User = Depends(ge
         doc["created_at"] = doc["created_at"].isoformat()
         schedules_to_create.append(doc)
     
+    # === VERIFICAR CONFLITOS CROSS-ORG ===
+    conflicts = []
+    for sched_doc in schedules_to_create:
+        sched_date = sched_doc.get("date", "")[:10]
+        sched_start = sched_doc.get("start_time", "")
+        sched_end = sched_doc.get("end_time", "")
+        for mid in sched_doc.get("assigned_members", []):
+            member_doc = await db.members.find_one({"member_id": mid}, {"_id": 0})
+            if not member_doc:
+                continue
+            
+            # Buscar membros em OUTRAS organizações pelo nome OU email OU user_id
+            match_conditions = []
+            if member_doc.get("user_id"):
+                match_conditions.append({"user_id": member_doc["user_id"]})
+            if member_doc.get("email"):
+                match_conditions.append({"email": {"$regex": f"^{member_doc['email']}$", "$options": "i"}})
+            if member_doc.get("name"):
+                match_conditions.append({"name": {"$regex": f"^{member_doc['name']}$", "$options": "i"}})
+            
+            if not match_conditions:
+                continue
+            
+            other_members = await db.members.find(
+                {
+                    "$or": match_conditions,
+                    "entity_id": {"$ne": entity_id},
+                    "active": {"$ne": False}
+                },
+                {"_id": 0, "member_id": 1, "entity_id": 1, "name": 1}
+            ).to_list(50)
+            
+            for om in other_members:
+                # Verificar se tem escala no mesmo dia/horário
+                conflict_query = {
+                    "assigned_members": om["member_id"],
+                    "entity_id": om["entity_id"],
+                    "date": {"$regex": f"^{sched_date}"}
+                }
+                if sched_start and sched_end:
+                    conflict_query["$or"] = [
+                        {"start_time": {"$lt": sched_end}, "end_time": {"$gt": sched_start}},
+                        {"start_time": {"$exists": False}},
+                        {"start_time": ""}
+                    ]
+                conflict_scheds = await db.schedules.find(conflict_query, {"_id": 0}).to_list(10)
+                if conflict_scheds:
+                    ent = await db.entities.find_one({"entity_id": om["entity_id"]}, {"_id": 0, "name": 1})
+                    conflicts.append({
+                        "member_name": member_doc.get("name", ""),
+                        "member_email": member_doc.get("email", ""),
+                        "member_id": mid,
+                        "conflict_entity": ent.get("name", "Outra organização") if ent else "Outra organização",
+                        "conflict_entity_id": om["entity_id"],
+                        "conflict_date": sched_date,
+                        "conflict_schedules": [{"schedule_id": cs.get("schedule_id", ""), "title": cs.get("title", ""), "start_time": cs.get("start_time", ""), "end_time": cs.get("end_time", "")} for cs in conflict_scheds]
+                    })
+    
+    # Se há conflitos e não foi forçado, BLOQUEAR a criação
+    if conflicts and not force:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Conflito de escalas detectado entre organizações",
+                "conflicts": conflicts
+            }
+        )
+    
     if schedules_to_create:
         await db.schedules.insert_many(schedules_to_create)
     
     result = await db.schedules.find_one({"schedule_id": schedules_to_create[0]["schedule_id"]}, {"_id": 0})
-    return result
+    
+    response = dict(result) if result else {}
+    if conflicts:
+        response["_conflicts"] = conflicts
+        response["_forced"] = True
+    return response
+
+# ============== CROSS-ORG RELEASE REQUESTS ==============
+
+@api_router.post("/schedules/release-request")
+async def create_release_request(data: ReleaseRequestCreate, user: User = Depends(get_current_user)):
+    """Solicitar liberação de membro para escala conflitante"""
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    requesting_entity = await db.entities.find_one({"entity_id": entity_id}, {"_id": 0})
+    requesting_entity_name = requesting_entity.get("name", "Organização") if requesting_entity else "Organização"
+    
+    created_requests = []
+    
+    # Agrupar conflitos por entidade de destino
+    conflicts_by_entity = {}
+    for conflict in data.conflicts:
+        target_eid = conflict.get("conflict_entity_id")
+        if not target_eid:
+            continue
+        if target_eid not in conflicts_by_entity:
+            conflicts_by_entity[target_eid] = {
+                "entity_name": conflict.get("conflict_entity", ""),
+                "members": []
+            }
+        conflicts_by_entity[target_eid]["members"].append(conflict)
+    
+    for target_eid, info in conflicts_by_entity.items():
+        for member_conflict in info["members"]:
+            conflict_sched_ids = [cs.get("schedule_id", "") for cs in member_conflict.get("conflict_schedules", [])]
+            conflict_sched_titles = [cs.get("title", "") for cs in member_conflict.get("conflict_schedules", [])]
+            conflict_times = [f"{cs.get('start_time', '')}-{cs.get('end_time', '')}" for cs in member_conflict.get("conflict_schedules", [])]
+            
+            # Verificar se já existe solicitação pendente para este membro/data
+            existing = await db.release_requests.find_one({
+                "requesting_entity_id": entity_id,
+                "target_entity_id": target_eid,
+                "member_name": member_conflict.get("member_name", ""),
+                "conflict_date": member_conflict.get("conflict_date", ""),
+                "status": "pending"
+            })
+            if existing:
+                continue
+            
+            release_req = ReleaseRequest(
+                requesting_entity_id=entity_id,
+                requesting_entity_name=requesting_entity_name,
+                target_entity_id=target_eid,
+                target_entity_name=info["entity_name"],
+                member_name=member_conflict.get("member_name", ""),
+                member_email=member_conflict.get("member_email", ""),
+                requested_schedule_data=data.schedule_data,
+                conflict_schedule_ids=conflict_sched_ids,
+                conflict_schedule_titles=conflict_sched_titles,
+                conflict_date=member_conflict.get("conflict_date", ""),
+                conflict_time=", ".join(conflict_times),
+                requested_by=user.user_id
+            )
+            doc = release_req.model_dump()
+            doc["created_at"] = doc["created_at"].isoformat()
+            await db.release_requests.insert_one(doc)
+            created_requests.append(doc["request_id"])
+    
+    if not created_requests:
+        return {"message": "Já existe uma solicitação pendente para este membro/data.", "request_ids": []}
+    
+    return {
+        "message": f"Solicitação de liberação enviada para {len(created_requests)} membro(s)!",
+        "request_ids": created_requests
+    }
+
+@api_router.get("/schedules/release-requests/incoming")
+async def get_incoming_release_requests(user: User = Depends(get_current_user)):
+    """Listar solicitações de liberação recebidas pela org atual (outras orgs querem nossos membros)"""
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    requests = await db.release_requests.find(
+        {"target_entity_id": entity_id, "status": "pending"},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    return requests
+
+@api_router.get("/schedules/release-requests/outgoing")
+async def get_outgoing_release_requests(user: User = Depends(get_current_user)):
+    """Listar solicitações de liberação enviadas pela org atual"""
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    requests = await db.release_requests.find(
+        {"requesting_entity_id": entity_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    return requests
+
+@api_router.post("/schedules/release-requests/{request_id}/respond")
+async def respond_release_request(request_id: str, request: Request, user: User = Depends(get_current_user)):
+    """Aprovar ou negar solicitação de liberação"""
+    entity_id = await get_current_entity_id(user)
+    await check_admin(user, entity_id)
+    
+    release_req = await db.release_requests.find_one(
+        {"request_id": request_id, "target_entity_id": entity_id, "status": "pending"},
+        {"_id": 0}
+    )
+    if not release_req:
+        raise HTTPException(status_code=404, detail="Solicitação não encontrada")
+    
+    body = await request.json()
+    approved = body.get("approved", False)
+    note = body.get("note", "")
+    
+    new_status = "approved" if approved else "denied"
+    await db.release_requests.update_one(
+        {"request_id": request_id},
+        {"$set": {
+            "status": new_status,
+            "responded_by": user.user_id,
+            "response_note": note,
+            "responded_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Se aprovado, criar a escala automaticamente na org solicitante
+    if approved:
+        sched_data = release_req.get("requested_schedule_data", {})
+        if sched_data:
+            requesting_eid = release_req["requesting_entity_id"]
+            schedule_date_str = sched_data.get("date", "")
+            if schedule_date_str:
+                try:
+                    schedule_date = datetime.fromisoformat(schedule_date_str)
+                    deadline = schedule_date - timedelta(days=1)
+                except:
+                    deadline = datetime.now(timezone.utc)
+            else:
+                deadline = datetime.now(timezone.utc)
+            
+            new_schedule = Schedule(
+                entity_id=requesting_eid,
+                title=sched_data.get("title", "Escala liberada"),
+                description=sched_data.get("description"),
+                schedule_type=sched_data.get("schedule_type", "class"),
+                date=sched_data.get("date", ""),
+                start_time=sched_data.get("start_time", ""),
+                end_time=sched_data.get("end_time", ""),
+                assigned_members=sched_data.get("assigned_members", []),
+                member_roles=sched_data.get("member_roles", {}),
+                confirmation_deadline=deadline.isoformat(),
+                created_by=release_req.get("requested_by", "")
+            )
+            doc = new_schedule.model_dump()
+            doc["created_at"] = doc["created_at"].isoformat()
+            doc["_release_approved"] = True
+            doc["_release_request_id"] = request_id
+            await db.schedules.insert_one(doc)
+            
+            return {
+                "message": f"Liberação aprovada! Escala criada automaticamente na org {release_req.get('requesting_entity_name', '')}.",
+                "schedule_id": doc["schedule_id"]
+            }
+    
+    return {"message": "Solicitação negada." if not approved else "Liberação aprovada!"}
 
 @api_router.put("/schedules/{schedule_id}")
 async def update_schedule(schedule_id: str, schedule_data: ScheduleCreate, update_all: bool = False, user: User = Depends(get_current_user)):
@@ -2555,6 +2853,7 @@ async def update_schedule(schedule_id: str, schedule_data: ScheduleCreate, updat
             "end_time": update_fields["end_time"],
             "assigned_members": update_fields.get("assigned_members", []),
             "member_roles": update_fields.get("member_roles", {}),
+            "period": update_fields.get("period"),
         }
         
         # Estratégia: buscar por parent_schedule_id OU por ser irmão com mesmo parent
@@ -2728,6 +3027,101 @@ async def get_my_schedules(user: User = Depends(get_current_user)):
     ).sort("date", 1).to_list(100)
     
     return schedules
+
+@api_router.get("/my-attendance-stats")
+async def get_my_attendance_stats(user: User = Depends(get_current_user)):
+    """Estatísticas de frequência do membro logado (somente escalas confirmadas)"""
+    entity_id = await get_current_entity_id(user)
+    member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
+    if not member:
+        return {"total_assigned": 0, "total_confirmed": 0, "total_declined": 0, "frequency_pct": 0, "confirmed_schedules": []}
+    
+    member_id = member["member_id"]
+    
+    today = datetime.now(timezone.utc).date().isoformat()
+    
+    # Total de escalas PASSADAS ou de HOJE onde o membro foi designado
+    total_assigned = await db.schedules.count_documents({
+        "assigned_members": member_id,
+        "entity_id": entity_id,
+        "date": {"$lte": today}
+    })
+    
+    # Total de escalas PASSADAS ou de HOJE onde confirmou presença
+    total_confirmed = await db.schedules.count_documents({
+        "confirmed_members": member_id,
+        "entity_id": entity_id,
+        "date": {"$lte": today}
+    })
+    
+    # Total de escalas PASSADAS ou de HOJE onde recusou
+    total_declined = await db.schedules.count_documents({
+        "declined_members": member_id,
+        "entity_id": entity_id,
+        "date": {"$lte": today}
+    })
+    
+    # Percentual de frequência
+    frequency_pct = round((total_confirmed / total_assigned * 100), 1) if total_assigned > 0 else 0
+    
+    # Últimas escalas confirmadas (para mostrar no dashboard)
+    confirmed_schedules = await db.schedules.find(
+        {"confirmed_members": member_id, "entity_id": entity_id},
+        {"_id": 0, "schedule_id": 1, "title": 1, "date": 1, "start_time": 1, "end_time": 1, "schedule_type": 1}
+    ).sort("date", -1).to_list(20)
+    
+    return {
+        "total_assigned": total_assigned,
+        "total_confirmed": total_confirmed,
+        "total_declined": total_declined,
+        "frequency_pct": frequency_pct,
+        "confirmed_schedules": confirmed_schedules
+    }
+
+@api_router.post("/schedules/check-conflicts")
+async def check_schedule_conflicts(request: Request, user: User = Depends(get_current_user)):
+    """Verifica conflitos de horário cross-org para membros antes de criar escala"""
+    entity_id = await get_current_entity_id(user)
+    data = await request.json()
+    member_ids = data.get("member_ids", [])
+    schedule_date = data.get("date", "")[:10]
+    start_time = data.get("start_time", "")
+    end_time = data.get("end_time", "")
+    
+    conflicts = []
+    for mid in member_ids:
+        member_doc = await db.members.find_one({"member_id": mid}, {"_id": 0})
+        if not member_doc or not member_doc.get("user_id"):
+            continue
+        uid = member_doc["user_id"]
+        other_members = await db.members.find(
+            {"user_id": uid, "entity_id": {"$ne": entity_id}, "active": True},
+            {"_id": 0, "member_id": 1, "entity_id": 1}
+        ).to_list(50)
+        for om in other_members:
+            conflict_query = {
+                "assigned_members": om["member_id"],
+                "entity_id": om["entity_id"],
+                "date": {"$regex": f"^{schedule_date}"}
+            }
+            if start_time and end_time:
+                conflict_query["$or"] = [
+                    {"start_time": {"$lt": end_time}, "end_time": {"$gt": start_time}},
+                    {"start_time": {"$exists": False}},
+                    {"start_time": ""}
+                ]
+            conflict_scheds = await db.schedules.find(conflict_query, {"_id": 0}).to_list(10)
+            if conflict_scheds:
+                ent = await db.entities.find_one({"entity_id": om["entity_id"]}, {"_id": 0, "name": 1})
+                conflicts.append({
+                    "member_name": member_doc.get("name", ""),
+                    "member_id": mid,
+                    "conflict_entity": ent.get("name", "Outra organização") if ent else "Outra organização",
+                    "conflict_date": schedule_date,
+                    "conflict_schedules": [{"title": cs.get("title", ""), "start_time": cs.get("start_time", ""), "end_time": cs.get("end_time", "")} for cs in conflict_scheds]
+                })
+    
+    return {"conflicts": conflicts}
 
 # ============== CONTENT APPROVAL ROUTES ==============
 
@@ -3371,13 +3765,31 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
         "entity_id": entity_id
     })
     
+    today_active_schedules = await db.schedules.count_documents({
+        "date": today,
+        "entity_id": entity_id
+    })
+    
     pending_approvals = await db.content_approvals.count_documents({"status": "pending", "entity_id": entity_id})
     
     upcoming_schedules = await db.schedules.find(
         {"date": {"$gte": today}, "entity_id": entity_id},
-        {"confirmed_members": 1, "_id": 0}
+        {"confirmed_members": 1, "assigned_members": 1, "date": 1, "_id": 0}
     ).to_list(100)
-    confirmed_attendance = sum(len(s.get("confirmed_members", [])) for s in upcoming_schedules)
+    
+    today_confirmed = 0
+    today_assigned = 0
+    total_confirmed = 0
+    total_assigned = 0
+    
+    for s in upcoming_schedules:
+        c_count = len(s.get("confirmed_members", []))
+        a_count = len(s.get("assigned_members", []))
+        total_confirmed += c_count
+        total_assigned += a_count
+        if s.get("date") == today:
+            today_confirmed += c_count
+            today_assigned += a_count
     
     this_month_start = datetime.now(timezone.utc).replace(day=1).isoformat()
     last_month = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
@@ -3399,9 +3811,13 @@ async def get_dashboard_stats(user: User = Depends(get_current_user)):
     return {
         "total_members": total_members,
         "active_schedules": active_schedules,
+        "today_active_schedules": today_active_schedules,
         "pending_approvals": pending_approvals,
-        "confirmed_attendance": confirmed_attendance,
-        "growth_percentage": round(growth, 1)
+        "today_confirmed": today_confirmed,
+        "today_assigned": today_assigned,
+        "total_confirmed": total_confirmed,
+        "total_assigned": total_assigned,
+        "member_growth_percentage": round(growth, 1)
     }
 
 @api_router.get("/dashboard/upcoming")
@@ -3634,24 +4050,53 @@ async def admin_update_user_email(user_id: str, request: Request, user: User = D
 
 @api_router.get("/announcements")
 async def get_announcements(user: User = Depends(get_current_user)):
-    """Busca avisos da organização (gerais + do setor do usuário)"""
+    """Busca avisos da organização. Admin vê todos, membros veem gerais + do seu setor."""
     entity_id = await get_current_entity_id(user)
     
-    # Buscar o membro para saber o setor
+    # Verificar se é admin
     member = await db.members.find_one({"user_id": user.user_id, "entity_id": entity_id}, {"_id": 0})
-    user_department = member.get("department", "") if member else ""
+    is_admin = user.is_superadmin or (member and member.get("is_admin", False))
     
-    # Buscar avisos gerais + avisos do setor do usuário
-    query = {
-        "entity_id": entity_id,
-        "active": True,
-        "$or": [
-            {"type": "general"},
-            {"type": "sector", "target_sector": user_department}
-        ]
-    }
+    if is_admin:
+        # Admin vê TODOS os avisos ativos
+        query = {
+            "entity_id": entity_id,
+            "active": True
+        }
+    else:
+        # Usuário normal: avisos gerais + avisos dos seus setores
+        user_departments = member.get("departments", []) if member else []
+        # Fallback para department (legacy)
+        if not user_departments and member:
+            user_departments = [member.get("department", "")] if member.get("department") else []
+        
+        query = {
+            "entity_id": entity_id,
+            "active": True,
+            "$or": [
+                {"type": "general"},
+                {"type": "sector", "target_sector": {"$in": user_departments}}
+            ]
+        }
     
     announcements = await db.announcements.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Para cada aviso do tipo 'sector', incluir contagem de membros do setor alvo
+    for ann in announcements:
+        if ann.get("type") == "sector" and ann.get("target_sector"):
+            target_sector = ann["target_sector"]
+            # Contar membros que pertencem ao setor alvo
+            sector_members_count = await db.members.count_documents({
+                "entity_id": entity_id,
+                "active": True,
+                "$or": [
+                    {"departments": target_sector},
+                    {"department": target_sector, "departments": {"$exists": False}},
+                    {"department": target_sector, "departments": []}
+                ]
+            })
+            ann["sector_members_count"] = sector_members_count
+    
     return announcements
 
 @api_router.get("/announcements/all")

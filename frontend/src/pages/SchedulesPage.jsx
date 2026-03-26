@@ -88,7 +88,7 @@ const generateGoogleCalendarUrl = (schedule) => {
 };
 
 // ============== SCHEDULE DETAIL CARD ==============
-const ScheduleDetailCard = ({ schedule, members, onConfirm, onEdit, onDelete, onRequestSwap, currentUserMemberId, isAdmin, scheduleTypes }) => {
+const ScheduleDetailCard = ({ schedule, members, onConfirm, onEdit, onDelete, onRequestSwap, currentUserMemberId, isAdmin, scheduleTypes, periods }) => {
   const getMemberById = (id) => members.find((m) => m.member_id === id);
   const confirmed = schedule.confirmed_members?.length || 0;
   const total = schedule.assigned_members?.length || 1;
@@ -204,7 +204,7 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onEdit, onDelete, on
           <p className="text-sm text-muted-foreground mb-4">{schedule.description}</p>
         )}
 
-        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
+        <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4 flex-wrap">
           <div className="flex items-center gap-1">
             <Clock className="w-4 h-4" />
             <span>{schedule.start_time} - {schedule.end_time}</span>
@@ -213,6 +213,25 @@ const ScheduleDetailCard = ({ schedule, members, onConfirm, onEdit, onDelete, on
             <Users className="w-4 h-4" />
             <span>{total} pessoas</span>
           </div>
+          {schedule.period && (() => {
+            const periodConfig = (periods || []).find(p => (typeof p === 'string' ? p : p.name) === schedule.period);
+            const pColor = periodConfig && typeof periodConfig !== 'string' ? periodConfig.color : 'indigo';
+            const colorMap = {
+              blue: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300',
+              green: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
+              purple: 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300',
+              amber: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300',
+              red: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300',
+              pink: 'bg-pink-100 dark:bg-pink-900/30 text-pink-700 dark:text-pink-300',
+              indigo: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300',
+              teal: 'bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300',
+            };
+            return (
+              <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${colorMap[pColor] || colorMap.indigo}`}>
+                {schedule.period}
+              </span>
+            );
+          })()}
         </div>
 
         <div className="space-y-2 mb-4">
@@ -495,6 +514,7 @@ export default function SchedulesPage() {
     { value: "class", label: "Aula", icon: "graduation-cap", color: "primary" },
     { value: "content", label: "Postagem", icon: "instagram", color: "pink" }
   ]);
+  const [periods, setPeriods] = useState([]);
 
   // Swap states
   const [swapDialogOpen, setSwapDialogOpen] = useState(false);
@@ -540,6 +560,9 @@ export default function SchedulesPage() {
   const [selectedChecklist, setSelectedChecklist] = useState("");
   const [checklistAssignee, setChecklistAssignee] = useState("");
 
+  // Release requests state
+  const [releaseRequests, setReleaseRequests] = useState([]);
+
   const noteColors = [
     { value: "blue", label: "Azul", bg: "bg-blue-500", light: "bg-blue-50 border-blue-200 text-blue-800" },
     { value: "red", label: "Vermelho", bg: "bg-red-500", light: "bg-red-50 border-red-200 text-red-800" },
@@ -562,7 +585,8 @@ export default function SchedulesPage() {
     repeat_enabled: false,
     repeat_type: "none", // none, daily, weekly, monthly
     repeat_days: [], // for weekly: ["monday", "wednesday", "friday"]
-    repeat_until: ""
+    repeat_until: "",
+    period: ""
   });
 
   const weekDays = [
@@ -596,13 +620,17 @@ export default function SchedulesPage() {
 
       const userMember = membersRes.data.find(m => m.user_id === userRes.data.user_id);
       setCurrentUserMember(userMember);
-      setIsAdmin(userRes.data.is_admin || userMember?.is_admin || false);
+      const adminFlag = userRes.data.is_admin || userMember?.is_admin || false;
+      setIsAdmin(adminFlag);
 
       // Fetch config for schedule types
       try {
         const configRes = await axios.get(`${API}/entities/current/config`, { withCredentials: true });
         if (configRes.data.custom_schedule_types?.length > 0) {
           setScheduleTypes(configRes.data.custom_schedule_types);
+        }
+        if (configRes.data.custom_periods?.length > 0) {
+          setPeriods(configRes.data.custom_periods);
         }
       } catch (e) {
         console.error("Error fetching config:", e);
@@ -623,6 +651,16 @@ export default function SchedulesPage() {
       } catch (e) {
         console.error("Error fetching checklist templates:", e);
       }
+
+      // Fetch release requests (admin only)
+      if (adminFlag) {
+        try {
+          const releaseRes = await axios.get(`${API}/schedules/release-requests/incoming`, { withCredentials: true });
+          setReleaseRequests(releaseRes.data);
+        } catch (e) {
+          console.error("Error fetching release requests:", e);
+        }
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Erro ao carregar dados");
@@ -631,7 +669,10 @@ export default function SchedulesPage() {
     }
   };
 
-  const handleCreateSchedule = async () => {
+  // Conflict dialog state
+  const [conflictDialog, setConflictDialog] = useState({ open: false, conflicts: [], scheduleData: null });
+
+  const handleCreateSchedule = async (forceCreate = false) => {
     try {
       const scheduleData = {
         title: formData.title,
@@ -644,7 +685,8 @@ export default function SchedulesPage() {
         member_roles: formData.member_roles,
         repeat_type: formData.repeat_enabled ? formData.repeat_type : "none",
         repeat_days: formData.repeat_days,
-        repeat_until: formData.repeat_until
+        repeat_until: formData.repeat_until,
+        period: formData.period && formData.period !== "__none__" ? formData.period : null
       };
 
       if (editingSchedule) {
@@ -680,7 +722,8 @@ export default function SchedulesPage() {
 
         toast.success(updateAll ? "Todas as escalas da série atualizadas!" : "Escala atualizada com sucesso!");
       } else {
-        const res = await axios.post(`${API}/schedules`, scheduleData, { withCredentials: true });
+        const url = forceCreate ? `${API}/schedules?force=true` : `${API}/schedules`;
+        const res = await axios.post(url, scheduleData, { withCredentials: true });
         const createdScheduleId = res.data?.schedule_id;
 
         // Assign checklist if selected
@@ -697,14 +740,28 @@ export default function SchedulesPage() {
             toast.success("Escala criada! (checklist não atribuído)");
           }
         } else {
-          toast.success("Escala criada com sucesso!");
+          if (forceCreate) {
+            toast.success("Escala criada (conflito ignorado pelo admin)!");
+          } else {
+            toast.success("Escala criada com sucesso!");
+          }
         }
       }
 
       setIsCreateOpen(false);
+      setConflictDialog({ open: false, conflicts: [], scheduleData: null });
       resetForm();
       fetchData();
     } catch (error) {
+      // Interceptar conflito 409
+      if (error.response?.status === 409 && error.response?.data?.detail?.conflicts) {
+        setConflictDialog({
+          open: true,
+          conflicts: error.response.data.detail.conflicts,
+          scheduleData: formData
+        });
+        return;
+      }
       console.error("Error saving schedule:", error);
       toast.error(editingSchedule ? "Erro ao atualizar escala" : "Erro ao criar escala");
     }
@@ -723,14 +780,15 @@ export default function SchedulesPage() {
       repeat_enabled: false,
       repeat_type: "none",
       repeat_days: [],
-      repeat_until: ""
+      repeat_until: "",
+      period: ""
     });
     setEditingSchedule(null);
     setSelectedChecklist("");
     setChecklistAssignee("");
   };
 
-  const handleEditSchedule = (schedule) => {
+  const handleEditSchedule = async (schedule) => {
     setEditingSchedule(schedule);
     setFormData({
       title: schedule.title,
@@ -744,8 +802,24 @@ export default function SchedulesPage() {
       repeat_enabled: schedule.repeat_type !== "none",
       repeat_type: schedule.repeat_type || "none",
       repeat_days: schedule.repeat_days || [],
-      repeat_until: schedule.repeat_until || ""
+      repeat_until: schedule.repeat_until || "",
+      period: schedule.period || ""
     });
+
+    // Load existing checklist assignment
+    setSelectedChecklist("");
+    setChecklistAssignee("");
+    try {
+      const chkRes = await axios.get(`${API}/schedules/${schedule.schedule_id}/checklists`, { withCredentials: true });
+      if (chkRes.data && chkRes.data.length > 0) {
+        const existing = chkRes.data[0];
+        setSelectedChecklist(existing.template_id || "");
+        setChecklistAssignee(existing.assigned_to || "");
+      }
+    } catch (e) {
+      console.error("Error loading schedule checklists:", e);
+    }
+
     setIsCreateOpen(true);
   };
 
@@ -1082,8 +1156,64 @@ export default function SchedulesPage() {
     );
   }
 
+  const handleRespondRelease = async (requestId, approved) => {
+    try {
+      await axios.post(`${API}/schedules/release-requests/${requestId}/respond`, { approved }, { withCredentials: true });
+      toast.success(approved ? "Liberação aprovada! Escala criada na outra organização." : "Solicitação negada.");
+      fetchData();
+    } catch (error) {
+      console.error("Error responding to release request:", error);
+      toast.error("Erro ao responder solicitação");
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fadeIn" data-testid="schedules-page">
+
+      {/* Release Requests Banner */}
+      {isAdmin && releaseRequests.length > 0 && (
+        <div className="space-y-3">
+          {releaseRequests.map((req) => (
+            <div key={req.request_id} className="p-4 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-lg">📩</span>
+                  <span className="font-semibold text-blue-800 dark:text-blue-300">Solicitação de Liberação</span>
+                </div>
+                <p className="text-sm text-foreground">
+                  A organização <strong>{req.requesting_entity_name}</strong> solicita a liberação de <strong>{req.member_name}</strong> para escala em <strong>{req.conflict_date}</strong> ({req.conflict_time}).
+                </p>
+                {req.conflict_schedule_titles?.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Conflita com: {req.conflict_schedule_titles.join(", ")}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  Escala solicitada: <strong>{req.requested_schedule_data?.title}</strong> ({req.requested_schedule_data?.start_time} - {req.requested_schedule_data?.end_time})
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-300 text-red-600 hover:bg-red-50"
+                  onClick={() => handleRespondRelease(req.request_id, false)}
+                >
+                  ✕ Negar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-green-600 text-white hover:bg-green-700"
+                  onClick={() => handleRespondRelease(req.request_id, true)}
+                >
+                  ✓ Liberar
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
@@ -1193,6 +1323,40 @@ export default function SchedulesPage() {
                   />
                 </div>
               </div>
+
+              {/* Período */}
+              {periods.length > 0 && (
+                <div className="space-y-2">
+                  <Label>Período</Label>
+                  <Select
+                    value={formData.period}
+                    onValueChange={(value) => setFormData({ ...formData, period: value })}
+                  >
+                    <SelectTrigger data-testid="schedule-period-select">
+                      <SelectValue placeholder="Selecione o período (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Sem período</SelectItem>
+                      {periods.map((p) => {
+                        const pName = typeof p === 'string' ? p : p.name;
+                        const pColor = typeof p === 'string' ? 'blue' : (p.color || 'blue');
+                        const dotMap = {
+                          blue: 'bg-blue-500', green: 'bg-green-500', purple: 'bg-purple-500', amber: 'bg-amber-500',
+                          red: 'bg-red-500', pink: 'bg-pink-500', indigo: 'bg-indigo-500', teal: 'bg-teal-500'
+                        };
+                        return (
+                          <SelectItem key={pName} value={pName}>
+                            <span className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${dotMap[pColor] || dotMap.blue}`} />
+                              {pName}
+                            </span>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Repetição */}
               <div className="space-y-4 p-4 bg-muted/50 rounded-lg border">
@@ -1400,7 +1564,7 @@ export default function SchedulesPage() {
               <DialogClose asChild>
                 <Button variant="outline">Cancelar</Button>
               </DialogClose>
-              <Button onClick={handleCreateSchedule} data-testid="save-schedule-btn">
+              <Button onClick={() => handleCreateSchedule()} data-testid="save-schedule-btn">
                 {editingSchedule ? "Salvar Alterações" : "Criar Escala"}
               </Button>
             </DialogFooter>
@@ -1782,6 +1946,7 @@ export default function SchedulesPage() {
                     currentUserMemberId={currentUserMember?.member_id}
                     isAdmin={isAdmin}
                     scheduleTypes={scheduleTypes}
+                    periods={periods}
                   />
                 ))}
               </div>
@@ -1889,6 +2054,75 @@ export default function SchedulesPage() {
               data-testid="confirm-delete-schedule"
             >
               {deleteDialog.deleteAll ? "Excluir Todas" : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Cross-Org Conflict Dialog */}
+      <AlertDialog open={conflictDialog.open} onOpenChange={(open) => !open && setConflictDialog({ ...conflictDialog, open: false })}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-600">
+              ⚠️ Conflito de Escalas Detectado
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Os seguintes membros já estão escalados em outra organização no mesmo horário:</p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {conflictDialog.conflicts.map((conflict, idx) => (
+                    <div key={idx} className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                      <p className="font-semibold text-foreground">{conflict.member_name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Já escalado na org <strong className="text-amber-700 dark:text-amber-400">{conflict.conflict_entity}</strong> em {conflict.conflict_date}
+                      </p>
+                      {conflict.conflict_schedules?.map((cs, i) => (
+                        <p key={i} className="text-xs text-muted-foreground mt-1">
+                          → {cs.title} ({cs.start_time} - {cs.end_time})
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-sm font-medium">Deseja solicitar a liberação do(s) membro(s) para a outra organização?</p>
+                <p className="text-xs text-muted-foreground">A organização que montou a escala primeiro precisará aprovar a liberação. Se aprovada, a escala será criada automaticamente.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConflictDialog({ open: false, conflicts: [], scheduleData: null })}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                try {
+                  const scheduleData = {
+                    title: formData.title,
+                    description: formData.description,
+                    schedule_type: formData.schedule_type,
+                    date: formData.date,
+                    start_time: formData.start_time,
+                    end_time: formData.end_time,
+                    assigned_members: formData.assigned_members,
+                    member_roles: formData.member_roles,
+                  };
+                  await axios.post(`${API}/schedules/release-request`, {
+                    conflicts: conflictDialog.conflicts,
+                    schedule_data: scheduleData
+                  }, { withCredentials: true });
+                  toast.success("Solicitação de liberação enviada! Aguarde a aprovação da outra organização.");
+                  setConflictDialog({ open: false, conflicts: [], scheduleData: null });
+                  setIsCreateOpen(false);
+                  resetForm();
+                  fetchData();
+                } catch (err) {
+                  console.error("Error sending release request:", err);
+                  toast.error(err.response?.data?.detail || "Erro ao enviar solicitação");
+                }
+              }}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+            >
+              📩 Solicitar Liberação
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

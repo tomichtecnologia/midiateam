@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Users,
   Calendar,
@@ -36,7 +37,13 @@ import {
   Eye,
   Check,
   ClipboardCheck,
-  ListChecks
+  ListChecks,
+  Filter,
+  ArrowUp,
+  ArrowDown,
+  Settings2,
+  LayoutDashboard,
+  UserCheck
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import axios from "axios";
@@ -48,7 +55,7 @@ import { getAvatarUrl } from "@/lib/utils";
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
 
-const StatCard = ({ title, value, icon: Icon, trend, color }) => (
+const StatCard = ({ title, value, icon: Icon, trend, color, subtitle }) => (
   <Card className="card-hover" data-testid={`stat-${title.toLowerCase().replace(/\s/g, "-")}`}>
     <CardContent className="p-6">
       <div className="flex items-start justify-between">
@@ -62,6 +69,9 @@ const StatCard = ({ title, value, icon: Icon, trend, color }) => (
                 {trend >= 0 ? "+" : ""}{trend}%
               </span>
             </div>
+          )}
+          {subtitle && (
+            <p className="text-sm text-muted-foreground mt-2">{subtitle}</p>
           )}
         </div>
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
@@ -92,9 +102,14 @@ const ScheduleCard = ({ schedule, members }) => {
             {schedule.schedule_type === "class" ? "Aula" : "Conteúdo"}
           </Badge>
         </div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 flex-wrap">
           <Clock className="w-4 h-4" />
           <span>{schedule.start_time} - {schedule.end_time}</span>
+          {schedule.period && (
+            <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-medium rounded-full">
+              {schedule.period}
+            </span>
+          )}
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
@@ -221,33 +236,46 @@ const MyScheduleCard = ({ schedule, currentMemberId, onConfirm, onDecline, onReq
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 flex-wrap">
           <Clock className="w-4 h-4" />
           <span>{schedule.start_time} - {schedule.end_time}</span>
+          {schedule.period && (
+            <span className="px-2 py-0.5 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-xs font-medium rounded-full">
+              {schedule.period}
+            </span>
+          )}
         </div>
 
         {/* Action Buttons - Only show if not past and not already responded */}
         {!isSchedulePast && !isConfirmed && !isDeclined && (
           <div className="flex gap-2 mt-3">
-            <Button
-              size="sm"
-              className="flex-1 bg-green-600 hover:bg-green-700"
-              onClick={() => onConfirm(schedule.schedule_id, currentMemberId)}
-              data-testid={`confirm-btn-${schedule.schedule_id}`}
-            >
-              <CheckCircle className="w-4 h-4 mr-1" />
-              Confirmar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
-              onClick={() => onDecline(schedule.schedule_id, currentMemberId)}
-              data-testid={`decline-btn-${schedule.schedule_id}`}
-            >
-              <XCircle className="w-4 h-4 mr-1" />
-              Não Posso
-            </Button>
+            {isScheduleToday ? (
+              <>
+                <Button
+                  size="sm"
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  onClick={() => onConfirm(schedule.schedule_id, currentMemberId)}
+                  data-testid={`confirm-btn-${schedule.schedule_id}`}
+                >
+                  <CheckCircle className="w-4 h-4 mr-1" />
+                  Confirmar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 border-red-300 text-red-600 hover:bg-red-50"
+                  onClick={() => onDecline(schedule.schedule_id, currentMemberId)}
+                  data-testid={`decline-btn-${schedule.schedule_id}`}
+                >
+                  <XCircle className="w-4 h-4 mr-1" />
+                  Não Posso
+                </Button>
+              </>
+            ) : (
+              <span className="text-xs text-muted-foreground italic flex-1 flex items-center justify-center">
+                Confirmação apenas no dia
+              </span>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -374,9 +402,53 @@ export default function Dashboard() {
     title: "", content: "", type: "general", target_sector: "", priority: "normal"
   });
   const [departments, setDepartments] = useState([]);
+  const [announcementFilter, setAnnouncementFilter] = useState("all"); // "all" or sector name
 
   // Checklists state
   const [myChecklists, setMyChecklists] = useState([]);
+
+  // Attendance stats state
+  const [attendanceStats, setAttendanceStats] = useState(null);
+
+  // Dashboard layout customization
+  const DEFAULT_SECTION_ORDER = ["mySchedules", "myFrequency", "swapRequests", "myChecklists", "contentGrid", "announcements", "rules"];
+  const [sectionOrder, setSectionOrder] = useState(() => {
+    try {
+      const saved = localStorage.getItem("midiateam_dashboard_order");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Garantir que todas as seções existam (caso novas sejam adicionadas)
+        const merged = [...parsed.filter(s => DEFAULT_SECTION_ORDER.includes(s))];
+        DEFAULT_SECTION_ORDER.forEach(s => { if (!merged.includes(s)) merged.push(s); });
+        return merged;
+      }
+    } catch {}
+    return DEFAULT_SECTION_ORDER;
+  });
+  const [editMode, setEditMode] = useState(false);
+
+  const moveSectionUp = (sectionId) => {
+    const idx = sectionOrder.indexOf(sectionId);
+    if (idx <= 0) return;
+    const newOrder = [...sectionOrder];
+    [newOrder[idx - 1], newOrder[idx]] = [newOrder[idx], newOrder[idx - 1]];
+    setSectionOrder(newOrder);
+    localStorage.setItem("midiateam_dashboard_order", JSON.stringify(newOrder));
+  };
+
+  const moveSectionDown = (sectionId) => {
+    const idx = sectionOrder.indexOf(sectionId);
+    if (idx >= sectionOrder.length - 1) return;
+    const newOrder = [...sectionOrder];
+    [newOrder[idx], newOrder[idx + 1]] = [newOrder[idx + 1], newOrder[idx]];
+    setSectionOrder(newOrder);
+    localStorage.setItem("midiateam_dashboard_order", JSON.stringify(newOrder));
+  };
+
+  const resetOrder = () => {
+    setSectionOrder(DEFAULT_SECTION_ORDER);
+    localStorage.removeItem("midiateam_dashboard_order");
+  };
 
   useEffect(() => {
     fetchDashboardData();
@@ -426,6 +498,12 @@ export default function Dashboard() {
         const chkRes = await axios.get(`${API}/checklist-assignments/my`, { withCredentials: true });
         setMyChecklists(chkRes.data);
       } catch (e) { console.error("Error fetching checklists:", e); }
+
+      // Fetch my attendance stats
+      try {
+        const attRes = await axios.get(`${API}/my-attendance-stats`, { withCredentials: true });
+        setAttendanceStats(attRes.data);
+      } catch (e) { console.error("Error fetching attendance stats:", e); }
 
       // Fetch departments for announcement form
       try {
@@ -591,12 +669,28 @@ export default function Dashboard() {
             Visão geral do sistema de mídia
           </p>
         </div>
-        <Button asChild data-testid="new-schedule-btn">
-          <Link to="/schedules">
-            <Calendar className="w-4 h-4 mr-2" />
-            Nova Escala
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={editMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEditMode(!editMode)}
+            className={editMode ? "bg-primary" : ""}
+          >
+            <LayoutDashboard className="w-4 h-4 mr-2" />
+            {editMode ? "Salvar Layout" : "Personalizar"}
+          </Button>
+          {editMode && (
+            <Button variant="ghost" size="sm" onClick={resetOrder}>
+              Resetar
+            </Button>
+          )}
+          <Button asChild data-testid="new-schedule-btn">
+            <Link to="/schedules">
+              <Calendar className="w-4 h-4 mr-2" />
+              Nova Escala
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -606,26 +700,38 @@ export default function Dashboard() {
           value={stats?.total_members || 0}
           icon={Users}
           color="bg-primary"
+          trend={stats?.member_growth_percentage}
         />
         <StatCard
-          title="Escalas Ativas"
-          value={stats?.active_schedules || 0}
+          title="Escalas (Hoje)"
+          value={stats?.today_active_schedules || 0}
           icon={Calendar}
+          subtitle={`Semana: ${stats?.active_schedules || 0}`}
           color="bg-secondary"
         />
+        {isAdmin && (
+          <StatCard
+            title="Aprovações Pendentes"
+            value={stats?.pending_approvals || 0}
+            icon={CheckSquare}
+            color="bg-amber-500"
+          />
+        )}
         <StatCard
-          title="Aprovações Pendentes"
-          value={stats?.pending_approvals || 0}
-          icon={CheckSquare}
-          color="bg-amber-500"
-        />
-        <StatCard
-          title="Confirmações"
-          value={stats?.confirmed_attendance || 0}
+          title="Confirmações (Hoje)"
+          value={`${stats?.today_confirmed || 0}/${stats?.today_assigned || 0}`}
           icon={CheckCircle}
-          trend={stats?.growth_percentage}
+          subtitle={`Geral: ${stats?.total_confirmed || 0}/${stats?.total_assigned || 0}`}
           color="bg-green-500"
         />
+        {attendanceStats && (
+          <StatCard
+            title="Minha Frequência"
+            value={`${attendanceStats.frequency_pct}%`}
+            icon={UserCheck}
+            color={attendanceStats.frequency_pct >= 80 ? "bg-emerald-500" : attendanceStats.frequency_pct >= 50 ? "bg-amber-500" : "bg-red-500"}
+          />
+        )}
       </div>
 
       {/* Swap Requests Alert */}
@@ -638,180 +744,274 @@ export default function Dashboard() {
         </Alert>
       )}
 
-      {/* MY SCHEDULES Section */}
-      {mySchedules.length > 0 && (
-        <Card data-testid="my-schedules-card">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CardTitle className="font-outfit text-lg">Minhas Escalas</CardTitle>
-                <Badge variant="secondary">{mySchedules.length}</Badge>
-              </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/schedules">
-                  Ver todas
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Link>
-              </Button>
+      {/* === REORDERABLE SECTIONS === */}
+      {sectionOrder.map((sectionId, idx) => {
+        // Section wrapper with edit mode controls
+        const SectionWrapper = ({ children, label }) => {
+          if (!children) return null;
+          return (
+            <div className={`relative ${editMode ? "ring-2 ring-dashed ring-primary/30 rounded-xl p-1" : ""}`}>
+              {editMode && (
+                <div className="flex items-center justify-between bg-primary/5 rounded-t-lg px-3 py-1.5 mb-1">
+                  <div className="flex items-center gap-2">
+                    <GripVertical className="w-4 h-4 text-primary/50" />
+                    <span className="text-xs font-semibold text-primary/70">{label}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                      onClick={() => moveSectionUp(sectionId)} disabled={idx === 0}>
+                      <ArrowUp className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7"
+                      onClick={() => moveSectionDown(sectionId)} disabled={idx === sectionOrder.length - 1}>
+                      <ArrowDown className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {children}
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mySchedules.slice(0, 6).map((schedule) => (
-                <MyScheduleCard
-                  key={schedule.schedule_id}
-                  schedule={schedule}
-                  currentMemberId={currentMember?.member_id}
-                  onConfirm={handleConfirmAttendance}
-                  onDecline={handleDeclineAttendance}
-                  onRequestSwap={handleOpenSwapDialog}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+          );
+        };
 
-      {/* Swap Requests Section */}
-      {relevantSwapRequests.length > 0 && (
-        <Card data-testid="swap-requests-card" className="border-amber-200">
-          <CardHeader className="pb-3">
-            <div className="flex items-center gap-2">
-              <ArrowRightLeft className="w-5 h-5 text-amber-600" />
-              <CardTitle className="font-outfit text-lg">Solicitações de Troca</CardTitle>
-              <Badge className="bg-amber-500">{relevantSwapRequests.length}</Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {relevantSwapRequests.map((request) => (
-                <SwapRequestCard
-                  key={request.swap_id}
-                  request={request}
-                  onAccept={handleAcceptSwap}
-                  onCancel={handleCancelSwap}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+        switch (sectionId) {
+          case "mySchedules":
+            if (mySchedules.length === 0 && !editMode) return null;
+            
+            const ptBRDate = new Date();
+            const todayStr = new Date(ptBRDate.getTime() - (ptBRDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+            const schedulesToday = mySchedules.filter(s => s.date <= todayStr);
+            const schedulesFuture = mySchedules.filter(s => s.date > todayStr);
 
-      {/* My Checklists Section */}
-      {myChecklists.length > 0 && (
-        <Card data-testid="my-checklists-card" className="border-teal-200 bg-gradient-to-br from-teal-50/30 to-transparent">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <ClipboardCheck className="w-5 h-5 text-teal-600" />
-                <CardTitle className="font-outfit text-lg">Minhas Checklists</CardTitle>
-                <Badge className="bg-teal-500">{myChecklists.length}</Badge>
-              </div>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/checklists">
-                  Ver todas
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {myChecklists.slice(0, 6).map((checklist) => {
-                const totalItems = checklist.items?.length || 0;
-                const doneItems = checklist.items?.filter(i => i.done).length || 0;
-                const progress = totalItems > 0 ? (doneItems / totalItems) * 100 : 0;
-                return (
-                  <Card key={checklist.assignment_id} className="card-hover">
-                    <CardContent className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-sm">{checklist.checklist_title}</h4>
-                        <Badge variant={progress === 100 ? "default" : "outline"} className="text-xs">
-                          {doneItems}/{totalItems}
-                        </Badge>
+            return (
+              <SectionWrapper key={sectionId} label="Minhas Escalas">
+                {mySchedules.length > 0 ? (
+                  <Card data-testid="my-schedules-card">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="font-outfit text-lg">Minhas Escalas</CardTitle>
+                          <Badge variant="secondary">{mySchedules.length}</Badge>
+                        </div>
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link to="/schedules">Ver todas<ChevronRight className="w-4 h-4 ml-1" /></Link>
+                        </Button>
                       </div>
-                      {checklist.schedule_title && (
-                        <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
-                          <Calendar className="w-3 h-3" />
-                          {checklist.schedule_title}
-                          {checklist.schedule_date && ` — ${format(parseISO(checklist.schedule_date), "dd/MM", { locale: ptBR })}`}
-                        </p>
-                      )}
-                      <Progress value={progress} className={`h-2 mb-3 ${progress === 100 ? "[&>div]:bg-green-500" : ""}`} />
-                      <div className="space-y-1.5">
-                        {checklist.items?.map((item) => (
-                          <button
-                            key={item.item_id}
-                            className={`w-full flex items-center gap-2 p-1.5 rounded text-xs text-left transition-all ${item.done
-                                ? "text-green-600 line-through opacity-60"
-                                : "text-foreground hover:bg-muted"
-                              }`}
-                            onClick={async () => {
-                              try {
-                                const res = await axios.put(
-                                  `${API}/checklist-assignments/${checklist.assignment_id}/toggle-item`,
-                                  { item_id: item.item_id, done: !item.done },
-                                  { withCredentials: true }
-                                );
-                                if (res.data.just_completed) {
-                                  toast.success("🎉 Checklist concluída! +10 pontos!", { duration: 5000 });
-                                }
-                                fetchDashboardData();
-                              } catch (err) {
-                                toast.error(err.response?.data?.detail || "Erro");
-                              }
-                            }}
-                          >
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${item.done ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground/30"
-                              }`}>
-                              {item.done && <Check className="w-2.5 h-2.5" />}
+                    </CardHeader>
+                    <CardContent>
+                      <Tabs defaultValue="hoje" className="w-full">
+                        <TabsList className="grid w-full grid-cols-2 mb-4">
+                          <TabsTrigger value="hoje">Hoje / Passadas ({schedulesToday.length})</TabsTrigger>
+                          <TabsTrigger value="futuras">Futuras ({schedulesFuture.length})</TabsTrigger>
+                        </TabsList>
+                        
+                        <TabsContent value="hoje">
+                          {schedulesToday.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t pt-2">
+                              {schedulesToday.map((schedule) => (
+                                <MyScheduleCard key={schedule.schedule_id} schedule={schedule}
+                                  currentMemberId={currentMember?.member_id}
+                                  onConfirm={handleConfirmAttendance} onDecline={handleDeclineAttendance}
+                                  onRequestSwap={handleOpenSwapDialog} />
+                              ))}
                             </div>
-                            <span>{item.label}</span>
-                          </button>
+                          ) : (
+                            <div className="text-center py-8 bg-muted/20 rounded-lg text-muted-foreground text-sm">Você não tem escalas para hoje.</div>
+                          )}
+                        </TabsContent>
+                        
+                        <TabsContent value="futuras">
+                          {schedulesFuture.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 border-t pt-2">
+                              {schedulesFuture.map((schedule) => (
+                                <MyScheduleCard key={schedule.schedule_id} schedule={schedule}
+                                  currentMemberId={currentMember?.member_id}
+                                  onConfirm={handleConfirmAttendance} onDecline={handleDeclineAttendance}
+                                  onRequestSwap={handleOpenSwapDialog} />
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8 bg-muted/20 rounded-lg text-muted-foreground text-sm">Você não tem escalas futuras.</div>
+                          )}
+                        </TabsContent>
+                      </Tabs>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="opacity-50"><CardContent className="p-4 text-center text-sm text-muted-foreground">Minhas Escalas (vazio)</CardContent></Card>
+                )}
+              </SectionWrapper>
+            );
+
+          case "myFrequency":
+            if (!attendanceStats && !editMode) return null;
+            return (
+              <SectionWrapper key={sectionId} label="Minha Frequência">
+                <Card className="border-emerald-200/50 bg-gradient-to-br from-emerald-50/30 to-transparent">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <UserCheck className="w-5 h-5 text-emerald-600" />
+                        <CardTitle className="font-outfit text-lg">Minha Frequência</CardTitle>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className={`text-2xl font-bold ${(attendanceStats?.frequency_pct || 0) >= 80 ? 'text-emerald-600' : (attendanceStats?.frequency_pct || 0) >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                            {attendanceStats?.frequency_pct || 0}%
+                          </div>
+                          <p className="text-xs text-muted-foreground">de presença</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {attendanceStats ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="text-center p-3 bg-emerald-50 rounded-lg">
+                            <div className="text-lg font-bold text-emerald-700">{attendanceStats.total_confirmed}</div>
+                            <div className="text-xs text-muted-foreground">Confirmadas</div>
+                          </div>
+                          <div className="text-center p-3 bg-red-50 rounded-lg">
+                            <div className="text-lg font-bold text-red-700">{attendanceStats.total_declined}</div>
+                            <div className="text-xs text-muted-foreground">Recusadas</div>
+                          </div>
+                          <div className="text-center p-3 bg-gray-50 rounded-lg">
+                            <div className="text-lg font-bold text-gray-700">{attendanceStats.total_assigned}</div>
+                            <div className="text-xs text-muted-foreground">Total Designadas</div>
+                          </div>
+                        </div>
+                        <Progress value={attendanceStats.frequency_pct} className={`h-2 ${attendanceStats.frequency_pct >= 80 ? '[&>div]:bg-emerald-500' : attendanceStats.frequency_pct >= 50 ? '[&>div]:bg-amber-500' : '[&>div]:bg-red-500'}`} />
+                        {attendanceStats.confirmed_schedules?.length > 0 && (
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">Últimas escalas confirmadas:</p>
+                            <div className="space-y-1.5">
+                              {attendanceStats.confirmed_schedules.slice(0, 5).map(s => (
+                                <div key={s.schedule_id} className="flex items-center justify-between text-xs p-2 bg-muted/30 rounded">
+                                  <span className="font-medium">{s.title || "Escala"}</span>
+                                  <span className="text-muted-foreground">
+                                    {s.date ? format(parseISO(s.date), "dd/MM", { locale: ptBR }) : "—"}
+                                    {s.start_time && ` ${s.start_time}`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-center text-sm text-muted-foreground py-4">Sem dados de frequência</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </SectionWrapper>
+            );
+
+          case "swapRequests":
+            if (relevantSwapRequests.length === 0 && !editMode) return null;
+            return (
+              <SectionWrapper key={sectionId} label="Solicitações de Troca">
+                {relevantSwapRequests.length > 0 ? (
+                  <Card data-testid="swap-requests-card" className="border-amber-200">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-2">
+                        <ArrowRightLeft className="w-5 h-5 text-amber-600" />
+                        <CardTitle className="font-outfit text-lg">Solicitações de Troca</CardTitle>
+                        <Badge className="bg-amber-500">{relevantSwapRequests.length}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {relevantSwapRequests.map((request) => (
+                          <SwapRequestCard key={request.swap_id} request={request}
+                            onAccept={handleAcceptSwap} onCancel={handleCancelSwap} />
                         ))}
                       </div>
                     </CardContent>
                   </Card>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                ) : (
+                  <Card className="opacity-50"><CardContent className="p-4 text-center text-sm text-muted-foreground">Solicitações de Troca (vazio)</CardContent></Card>
+                )}
+              </SectionWrapper>
+            );
 
-      {/* Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Upcoming Schedules */}
-        <Card data-testid="upcoming-schedules-card">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="font-outfit text-lg">Próximas Escalas</CardTitle>
-              <Button variant="ghost" size="sm" asChild>
-                <Link to="/schedules" data-testid="view-all-schedules">
-                  Ver todas
-                  <ChevronRight className="w-4 h-4 ml-1" />
-                </Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {upcomingSchedules.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Calendar className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>Nenhuma escala programada</p>
-              </div>
-            ) : (
-              upcomingSchedules.map((schedule) => (
-                <ScheduleCard
-                  key={schedule.schedule_id}
-                  schedule={schedule}
-                  members={members}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
+          case "myChecklists":
+            if (myChecklists.length === 0 && !editMode) return null;
+            return (
+              <SectionWrapper key={sectionId} label="Minhas Checklists">
+                {myChecklists.length > 0 ? (
+                  <Card data-testid="my-checklists-card" className="border-teal-200 bg-gradient-to-br from-teal-50/30 to-transparent">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ClipboardCheck className="w-5 h-5 text-teal-600" />
+                          <CardTitle className="font-outfit text-lg">Minhas Checklists</CardTitle>
+                          <Badge className="bg-teal-500">{myChecklists.length}</Badge>
+                        </div>
+                        <Button variant="ghost" size="sm" asChild>
+                          <Link to="/checklists">Ver todas<ChevronRight className="w-4 h-4 ml-1" /></Link>
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {myChecklists.slice(0, 6).map((checklist) => {
+                          const totalItems = checklist.items?.length || 0;
+                          const doneItems = checklist.items?.filter(i => i.done).length || 0;
+                          const progress = totalItems > 0 ? (doneItems / totalItems) * 100 : 0;
+                          return (
+                            <Card key={checklist.assignment_id} className="card-hover">
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="font-semibold text-sm">{checklist.checklist_title}</h4>
+                                  <Badge variant={progress === 100 ? "default" : "outline"} className="text-xs">
+                                    {doneItems}/{totalItems}
+                                  </Badge>
+                                </div>
+                                {checklist.schedule_title && (
+                                  <p className="text-xs text-muted-foreground mb-2 flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    {checklist.schedule_title}
+                                    {checklist.schedule_date && ` — ${format(parseISO(checklist.schedule_date), "dd/MM", { locale: ptBR })}`}
+                                  </p>
+                                )}
+                                <Progress value={progress} className={`h-2 mb-3 ${progress === 100 ? "[&>div]:bg-green-500" : ""}`} />
+                                <div className="space-y-1.5">
+                                  {checklist.items?.map((item) => (
+                                    <button key={item.item_id}
+                                      className={`w-full flex items-center gap-2 p-1.5 rounded text-xs text-left transition-all ${item.done ? "text-green-600 line-through opacity-60" : "text-foreground hover:bg-muted"}`}
+                                      onClick={async () => {
+                                        try {
+                                          const res = await axios.put(`${API}/checklist-assignments/${checklist.assignment_id}/toggle-item`,
+                                            { item_id: item.item_id, done: !item.done }, { withCredentials: true });
+                                          if (res.data.just_completed) toast.success("🎉 Checklist concluída! +10 pontos!", { duration: 5000 });
+                                          fetchDashboardData();
+                                        } catch (err) { toast.error(err.response?.data?.detail || "Erro"); }
+                                      }}>
+                                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${item.done ? "bg-green-500 border-green-500 text-white" : "border-muted-foreground/30"}`}>
+                                        {item.done && <Check className="w-2.5 h-2.5" />}
+                                      </div>
+                                      <span>{item.label}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="opacity-50"><CardContent className="p-4 text-center text-sm text-muted-foreground">Minhas Checklists (vazio)</CardContent></Card>
+                )}
+              </SectionWrapper>
+            );
 
+          case "contentGrid":
+            return (
+              <SectionWrapper key={sectionId} label="Aprovações Pendentes">
+                <div className="grid grid-cols-1 gap-6">
         {/* Pending Approvals */}
         <Card data-testid="pending-approvals-card">
           <CardHeader className="pb-3">
@@ -842,196 +1042,184 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
+                </div>
+              </SectionWrapper>
+            );
 
-      {/* Announcements / Avisos */}
-      <Card data-testid="announcements-card" className="border-orange-200/50">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
-                <Megaphone className="w-4 h-4 text-orange-600" />
-              </div>
-              <div>
-                <CardTitle className="font-outfit text-lg">Avisos</CardTitle>
-                <p className="text-xs text-muted-foreground mt-0.5">Comunicados da organização</p>
-              </div>
-            </div>
-            {isAdmin && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setNewAnnouncement({ title: "", content: "", type: "general", target_sector: "", priority: "normal" });
-                  setAnnouncementDialogOpen(true);
-                }}
-                className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Novo Aviso
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {announcements.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Nenhum aviso no momento</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {announcements.map((ann) => {
-                const hasRead = ann.read_by?.some(r => r.user_id === currentMember?.user_id);
-                const readCount = ann.read_by?.length || 0;
-                const totalMembers = members.length;
-                return (
-                  <div
-                    key={ann.announcement_id}
-                    className={`p-4 rounded-lg border ${ann.priority === 'urgent' ? 'border-red-300 bg-red-50/80' :
-                      ann.priority === 'important' ? 'border-amber-300 bg-amber-50/80' :
-                        'border-gray-200 bg-gray-50/50'
-                      }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-sm">{ann.title}</h4>
-                          {ann.type === 'sector' && (
-                            <Badge variant="outline" className="text-xs">{ann.target_sector}</Badge>
-                          )}
-                          {ann.priority === 'urgent' && (
-                            <Badge variant="destructive" className="text-xs">Urgente</Badge>
-                          )}
-                          {ann.priority === 'important' && (
-                            <Badge className="bg-amber-500 text-xs">Importante</Badge>
-                          )}
+          case "announcements":
+            return (
+              <SectionWrapper key={sectionId} label="Avisos">
+                <Card data-testid="announcements-card" className="border-orange-200/50">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center">
+                          <Megaphone className="w-4 h-4 text-orange-600" />
                         </div>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ann.content}</p>
-                        <div className="flex items-center gap-3 mt-2">
-                          <span className="text-xs text-muted-foreground">
-                            {ann.created_by_name} • {readCount}/{totalMembers} leram
-                          </span>
-                          <div className="flex-1 max-w-[120px]">
-                            <Progress value={(readCount / Math.max(totalMembers, 1)) * 100} className="h-1.5" />
-                          </div>
+                        <div>
+                          <CardTitle className="font-outfit text-lg">Avisos</CardTitle>
+                          <p className="text-xs text-muted-foreground mt-0.5">Comunicados da organização</p>
                         </div>
                       </div>
-                      <div className="flex flex-col items-end gap-1">
-                        {hasRead ? (
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
-                            <Check className="w-3 h-3 mr-1" />
-                            Lido
-                          </Badge>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
-                            onClick={async () => {
-                              try {
-                                await axios.post(`${API}/announcements/${ann.announcement_id}/read`, {}, { withCredentials: true });
-                                toast.success("Leitura confirmada!");
-                                fetchDashboardData();
-                              } catch (e) {
-                                toast.error("Erro ao confirmar");
-                              }
-                            }}
-                          >
-                            <Eye className="w-3 h-3 mr-1" />
-                            Li e estou de acordo
-                          </Button>
+                      <div className="flex items-center gap-2">
+                        {isAdmin && departments.length > 0 && (
+                          <Select value={announcementFilter} onValueChange={setAnnouncementFilter}>
+                            <SelectTrigger className="w-[160px] h-8 text-xs">
+                              <Filter className="w-3 h-3 mr-1" />
+                              <SelectValue placeholder="Filtrar setor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">Todos os setores</SelectItem>
+                              <SelectItem value="general">Apenas Gerais</SelectItem>
+                              {departments.map((dept) => (
+                                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         )}
                         {isAdmin && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 text-red-400 hover:text-red-600"
-                            onClick={async () => {
-                              try {
-                                await axios.delete(`${API}/announcements/${ann.announcement_id}`, { withCredentials: true });
-                                toast.success("Aviso excluído!");
-                                fetchDashboardData();
-                              } catch (e) {
-                                toast.error("Erro ao excluir");
-                              }
-                            }}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
+                          <Button variant="ghost" size="sm"
+                            onClick={() => { setNewAnnouncement({ title: "", content: "", type: "general", target_sector: "", priority: "normal" }); setAnnouncementDialogOpen(true); }}
+                            className="text-orange-600 hover:text-orange-700 hover:bg-orange-50">
+                            <Plus className="w-4 h-4 mr-1" /> Novo Aviso
                           </Button>
                         )}
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Rules Board */}
-      <Card data-testid="rules-board-card" className="border-blue-200/50">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                <BookOpen className="w-4 h-4 text-blue-600" />
-              </div>
-              <div>
-                <CardTitle className="font-outfit text-lg">Regras da Organização</CardTitle>
-                {rulesUpdatedBy && (
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Atualizado por {rulesUpdatedBy}
-                  </p>
-                )}
-              </div>
-            </div>
-            {isAdmin && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleOpenRulesDialog}
-                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                data-testid="edit-rules-btn"
-              >
-                <Pencil className="w-4 h-4 mr-1" />
-                Editar
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent>
-          {rules.filter(r => r.active !== false).length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>Nenhuma regra definida</p>
-              {isAdmin && (
-                <p className="text-sm mt-1">Clique em "Editar" para adicionar regras</p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {rules.filter(r => r.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)).map((rule, index) => (
-                <div
-                  key={index}
-                  className="flex items-start gap-3 p-3 rounded-lg bg-gradient-to-r from-blue-50/80 to-indigo-50/50 border border-blue-100/60"
-                >
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold mt-0.5">
-                    {index + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-semibold text-sm text-foreground">{rule.title}</h4>
-                    {rule.content && (
-                      <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{rule.content}</p>
+                  </CardHeader>
+                  <CardContent>
+                    {announcements.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Megaphone className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <p>Nenhum aviso no momento</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {announcements
+                          .filter(ann => {
+                            if (announcementFilter === "all") return true;
+                            if (announcementFilter === "general") return ann.type === "general";
+                            return ann.type === "sector" && ann.target_sector === announcementFilter;
+                          })
+                          .map((ann) => {
+                          const hasRead = ann.read_by?.some(r => r.user_id === currentMember?.user_id);
+                          const readCount = ann.read_by?.length || 0;
+                          const relevantTotal = (ann.type === "sector" && ann.sector_members_count != null)
+                            ? ann.sector_members_count : members.length;
+                          return (
+                            <div key={ann.announcement_id}
+                              className={`p-4 rounded-lg border ${ann.priority === 'urgent' ? 'border-red-300 bg-red-50/80' :
+                                ann.priority === 'important' ? 'border-amber-300 bg-amber-50/80' : 'border-gray-200 bg-gray-50/50'}`}>
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="font-semibold text-sm">{ann.title}</h4>
+                                    {ann.type === 'sector' && <Badge variant="outline" className="text-xs">{ann.target_sector}</Badge>}
+                                    {ann.priority === 'urgent' && <Badge variant="destructive" className="text-xs">Urgente</Badge>}
+                                    {ann.priority === 'important' && <Badge className="bg-amber-500 text-xs">Importante</Badge>}
+                                  </div>
+                                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{ann.content}</p>
+                                  <div className="flex items-center gap-3 mt-2">
+                                    <span className="text-xs text-muted-foreground">
+                                      {ann.created_by_name} • {readCount}/{relevantTotal} leram
+                                    </span>
+                                    <div className="flex-1 max-w-[120px]">
+                                      <Progress value={(readCount / Math.max(relevantTotal, 1)) * 100} className="h-1.5" />
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                  {hasRead ? (
+                                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300 text-xs">
+                                      <Check className="w-3 h-3 mr-1" /> Lido
+                                    </Badge>
+                                  ) : (
+                                    <Button size="sm" variant="outline"
+                                      className="text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                                      onClick={async () => {
+                                        try { await axios.post(`${API}/announcements/${ann.announcement_id}/read`, {}, { withCredentials: true }); toast.success("Leitura confirmada!"); fetchDashboardData(); }
+                                        catch (e) { toast.error("Erro ao confirmar"); }
+                                      }}>
+                                      <Eye className="w-3 h-3 mr-1" /> Li e estou de acordo
+                                    </Button>
+                                  )}
+                                  {isAdmin && (
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-400 hover:text-red-600"
+                                      onClick={async () => {
+                                        try { await axios.delete(`${API}/announcements/${ann.announcement_id}`, { withCredentials: true }); toast.success("Aviso excluído!"); fetchDashboardData(); }
+                                        catch (e) { toast.error("Erro ao excluir"); }
+                                      }}>
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  </CardContent>
+                </Card>
+              </SectionWrapper>
+            );
+
+          case "rules":
+            return (
+              <SectionWrapper key={sectionId} label="Regras da Organização">
+                <Card data-testid="rules-board-card" className="border-blue-200/50">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                          <BookOpen className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div>
+                          <CardTitle className="font-outfit text-lg">Regras da Organização</CardTitle>
+                          {rulesUpdatedBy && (
+                            <p className="text-xs text-muted-foreground mt-0.5">Atualizado por {rulesUpdatedBy}</p>
+                          )}
+                        </div>
+                      </div>
+                      {isAdmin && (
+                        <Button variant="ghost" size="sm" onClick={handleOpenRulesDialog}
+                          className="text-blue-600 hover:text-blue-700 hover:bg-blue-50" data-testid="edit-rules-btn">
+                          <Pencil className="w-4 h-4 mr-1" /> Editar
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {rules.filter(r => r.active !== false).length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <p>Nenhuma regra definida</p>
+                        {isAdmin && <p className="text-sm mt-1">Clique em "Editar" para adicionar regras</p>}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {rules.filter(r => r.active !== false).sort((a, b) => (a.order || 0) - (b.order || 0)).map((rule, index) => (
+                          <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-gradient-to-r from-blue-50/80 to-indigo-50/50 border border-blue-100/60">
+                            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-sm font-bold mt-0.5">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-sm text-foreground">{rule.title}</h4>
+                              {rule.content && <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{rule.content}</p>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </SectionWrapper>
+            );
+
+          default:
+            return null;
+        }
+      })}
 
       {/* Swap Request Dialog */}
       <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>

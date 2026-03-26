@@ -1,52 +1,232 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Play, ArrowLeft, Loader2, CheckCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Play, ArrowLeft, Loader2, CheckCircle, Briefcase, Building2, Church, Search, X, ChevronsUpDown, Check } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
+import { cn } from "@/lib/utils";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 const API = `${BACKEND_URL}/api`;
+
+// ============ SEARCHABLE MULTI-SELECT ============
+function SearchableMultiSelect({ options, selected, onChange, placeholder, searchPlaceholder, emptyMessage, icon: Icon, renderOption }) {
+  const [open, setOpen] = useState(false);
+
+  const handleToggle = (value) => {
+    if (selected.includes(value)) {
+      onChange(selected.filter(v => v !== value));
+    } else {
+      onChange([...selected, value]);
+    }
+  };
+
+  const handleRemove = (value, e) => {
+    e.stopPropagation();
+    onChange(selected.filter(v => v !== value));
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-normal h-auto min-h-[40px] py-2"
+        >
+          <div className="flex flex-wrap gap-1.5 flex-1 text-left">
+            {selected.length === 0 ? (
+              <span className="text-muted-foreground text-sm">{placeholder}</span>
+            ) : (
+              selected.map((val) => {
+                const label = renderOption ? renderOption(val) : val;
+                return (
+                  <Badge
+                    key={val}
+                    variant="secondary"
+                    className="text-xs px-2 py-0.5 gap-1 shrink-0"
+                  >
+                    {label}
+                    <X
+                      className="w-3 h-3 cursor-pointer hover:text-destructive transition-colors"
+                      onClick={(e) => handleRemove(val, e)}
+                    />
+                  </Badge>
+                );
+              })
+            )}
+          </div>
+          <ChevronsUpDown className="w-4 h-4 shrink-0 opacity-50 ml-2" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder || "Pesquisar..."} />
+          <CommandList>
+            <CommandEmpty>{emptyMessage || "Nenhum item encontrado."}</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => {
+                const value = typeof option === "string" ? option : option.value;
+                const label = typeof option === "string" ? option : option.label;
+                const description = typeof option === "object" ? option.description : null;
+                const isSelected = selected.includes(value);
+
+                return (
+                  <CommandItem
+                    key={value}
+                    value={label}
+                    onSelect={() => handleToggle(value)}
+                    className="cursor-pointer"
+                  >
+                    <div className={cn(
+                      "w-4 h-4 rounded border mr-2 flex items-center justify-center shrink-0 transition-colors",
+                      isSelected ? "bg-primary border-primary" : "border-muted-foreground/40"
+                    )}>
+                      {isSelected && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium">{label}</span>
+                      {description && (
+                        <span className="text-xs text-muted-foreground block">{description}</span>
+                      )}
+                    </div>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [registrationOptions, setRegistrationOptions] = useState({ roles: [], departments: [] });
+  const [availableEntities, setAvailableEntities] = useState([]);
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     phone: "",
     password: "",
     confirmPassword: "",
+    roles: [],
+    department: "",
+    selectedEntities: [],
   });
+
+  useEffect(() => {
+    // Buscar opções de cargo e setor da entidade configurada no admin
+    axios.get(`${API}/auth/registration-options`)
+      .then(res => {
+        setRegistrationOptions(res.data);
+        // Se tiver departamentos, selecionar o primeiro como padrão
+        if (res.data.departments?.length > 0) {
+          setFormData(prev => ({ ...prev, department: res.data.departments[0] }));
+        }
+      })
+      .catch(err => {
+        console.error("Erro ao carregar opções de cadastro:", err);
+        // Fallback com opções padrão em português
+        const fallback = {
+          roles: ["Operador", "Editor", "Câmera", "Sonoplastia", "Mídias Sociais"],
+          departments: ["Produção", "Conteúdo", "Desenvolvimento"],
+        };
+        setRegistrationOptions(fallback);
+        setFormData(prev => ({ ...prev, department: fallback.departments[0] }));
+      });
+
+    // Buscar entidades disponíveis para seleção
+    axios.get(`${API}/auth/available-entities`)
+      .then(res => {
+        setAvailableEntities(res.data);
+      })
+      .catch(err => {
+        console.error("Erro ao carregar entidades:", err);
+      });
+  }, []);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  const handleRolesChange = (newRoles) => {
+    setFormData(prev => ({ ...prev, roles: newRoles }));
+  };
+
+  const handleEntitiesChange = (newEntities) => {
+    setFormData(prev => ({ ...prev, selectedEntities: newEntities }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
+    const name = formData.name.trim();
+    const email = formData.email.trim();
+
     if (formData.password !== formData.confirmPassword) {
-      toast.error("As senhas não coincidem");
+      toast.error("As senhas digitadas não são iguais. Verifique e tente novamente.");
       return;
     }
 
     if (formData.password.length < 6) {
-      toast.error("A senha deve ter pelo menos 6 caracteres");
+      toast.error("A senha é muito curta. Use pelo menos 6 caracteres.");
+      return;
+    }
+
+    if (formData.roles.length === 0) {
+      toast.error("Selecione pelo menos um cargo/função.");
+      return;
+    }
+
+    if (!formData.department) {
+      toast.error("Selecione um setor.");
+      return;
+    }
+
+    if (availableEntities.length > 0 && formData.selectedEntities.length === 0) {
+      toast.error("Selecione pelo menos uma organização.");
       return;
     }
 
     setLoading(true);
     try {
       const response = await axios.post(`${API}/auth/register`, {
-        name: formData.name,
-        email: formData.email,
+        name: name,
+        email: email,
         phone: formData.phone || null,
         password: formData.password,
+        roles: formData.roles,
+        department: formData.department,
+        requested_entities: formData.selectedEntities,
       });
 
       // Se foi auto-aprovado (primeiro usuário), redireciona para login
@@ -59,7 +239,8 @@ export default function RegisterPage() {
       setSuccess(true);
       toast.success("Cadastro enviado com sucesso!");
     } catch (error) {
-      const message = error.response?.data?.detail || "Erro ao enviar cadastro";
+      console.error("Erro no cadastro:", error);
+      const message = error.response?.data?.detail || error.message || "Erro ao enviar cadastro";
       toast.error(message);
     } finally {
       setLoading(false);
@@ -77,8 +258,14 @@ export default function RegisterPage() {
             <h2 className="font-outfit text-2xl font-bold text-foreground mb-2">
               Cadastro Enviado!
             </h2>
-            <p className="text-muted-foreground mb-6">
-              Seu cadastro foi enviado para aprovação. Você receberá uma notificação quando for aprovado e poderá fazer login.
+            <p className="text-muted-foreground mb-2">
+              Seu cadastro foi enviado para aprovação dos administradores
+              {formData.selectedEntities.length > 0 && (
+                <> das organizações selecionadas</>
+              )}.
+            </p>
+            <p className="text-sm text-muted-foreground mb-6">
+              Você receberá uma notificação quando for aprovado e poderá fazer login.
             </p>
             <Link to="/login">
               <Button className="w-full" data-testid="back-to-login-btn">
@@ -122,8 +309,8 @@ export default function RegisterPage() {
       </div>
 
       {/* Right Side - Register Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-background">
-        <Card className="w-full max-w-md border-0 shadow-none lg:shadow-lg">
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-background overflow-y-auto">
+        <Card className="w-full max-w-md border-0 shadow-none lg:shadow-lg my-4">
           <CardContent className="p-8">
             {/* Back Button */}
             <Link to="/" className="inline-flex items-center text-muted-foreground hover:text-foreground mb-6">
@@ -189,6 +376,82 @@ export default function RegisterPage() {
                     onChange={handleChange}
                     data-testid="register-phone-input"
                   />
+                </div>
+
+                {/* Organizações / Entidades - Multi-select pesquisável */}
+                {availableEntities.length > 0 && (
+                  <div className="space-y-2" data-testid="entity-select-section">
+                    <Label className="flex items-center gap-2">
+                      <Church className="w-4 h-4 text-muted-foreground" />
+                      Organizações
+                    </Label>
+                    <p className="text-xs text-muted-foreground -mt-1">
+                      Selecione as organizações que deseja participar
+                    </p>
+                    <SearchableMultiSelect
+                      options={availableEntities.map(e => ({
+                        value: e.entity_id,
+                        label: e.name,
+                        description: e.description || null,
+                      }))}
+                      selected={formData.selectedEntities}
+                      onChange={handleEntitiesChange}
+                      placeholder="Selecione organizações..."
+                      searchPlaceholder="Pesquisar organização..."
+                      emptyMessage="Nenhuma organização encontrada."
+                      icon={Church}
+                      renderOption={(val) => {
+                        const ent = availableEntities.find(e => e.entity_id === val);
+                        return ent?.name || val;
+                      }}
+                    />
+                    {formData.selectedEntities.length === 0 && (
+                      <p className="text-xs text-amber-600">Selecione pelo menos uma organização</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Cargo / Função - Multi-select pesquisável */}
+                <div className="space-y-2" data-testid="role-select-section">
+                  <Label className="flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-muted-foreground" />
+                    Cargo / Função
+                  </Label>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    Selecione uma ou mais funções que você exerce
+                  </p>
+                  <SearchableMultiSelect
+                    options={registrationOptions.roles}
+                    selected={formData.roles}
+                    onChange={handleRolesChange}
+                    placeholder="Selecione funções..."
+                    searchPlaceholder="Pesquisar função..."
+                    emptyMessage="Nenhuma função encontrada."
+                    icon={Briefcase}
+                  />
+                  {formData.roles.length === 0 && (
+                    <p className="text-xs text-amber-600">Selecione pelo menos um cargo</p>
+                  )}
+                </div>
+
+                {/* Setor / Departamento - Puxado das configurações do admin */}
+                <div className="space-y-2">
+                  <Label htmlFor="department">Setor</Label>
+                  <Select
+                    value={formData.department}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, department: value }))}
+                  >
+                    <SelectTrigger id="department" data-testid="register-department-select">
+                      <SelectValue placeholder="Selecione o setor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {registrationOptions.departments.map((dept) => (
+                        <SelectItem key={dept} value={dept}>
+                          {dept}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">

@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  db:
+    image: mongo:4.4
+    container_name: midiateam-db
+    # IMPORTANT: Do NOT expose port 27017 to the internet!
+    # MongoDB is only accessible internally via Docker network
+    expose:
+      - "27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: always
+    networks:
+      - midiateam-net
+
+  backend:
+    build: ./backend
+    container_name: midiateam-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URL=mongodb://db:27017
+      - DB_NAME=midiateam_local
+      - IS_PRODUCTION=true
+      - CORS_ORIGINS=https://midiateam.com.br,https://www.midiateam.com.br,http://179.48.68.81
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      - db
+    restart: always
+    networks:
+      - midiateam-net
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: midiateam-frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - backend
+    restart: always
+    networks:
+      - midiateam-net
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
+
+  certbot:
+    image: certbot/certbot
+    container_name: midiateam-certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  mongodb_data:
+  uploads_data:
+
+
+networks:
+  midiateam-net:
+    driver: bridge
